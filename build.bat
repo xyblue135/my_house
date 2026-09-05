@@ -2,6 +2,9 @@
 setlocal
 pushd "%~dp0"
 
+set "JAVA_HOME=D:\4environment\Java\jdk-21.0.7"
+set "PATH=%JAVA_HOME%\bin;%PATH%"
+
 where java >nul 2>&1
 if errorlevel 1 (
   echo [ItemNest] Java was not found. JDK 21 is required.
@@ -68,5 +71,5 @@ popd
 
 echo.
 echo [ItemNest] Build completed.
-echo [ItemNest] JAR: backend\target\itemnest-0.8.0.jar
+echo [ItemNest] JAR: backend\target\itemnest-1.0.0.jar
 popd

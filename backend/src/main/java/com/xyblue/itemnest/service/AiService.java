@@ -102,12 +102,20 @@ public class AiService {
                 .header("Authorization", "Bearer " + apiKey).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8)).build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("HTTP " + response.statusCode());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                org.slf4j.LoggerFactory.getLogger(AiService.class)
+                    .warn("AI 接口返回 HTTP {} (model={}): {}",
+                        response.statusCode(), settings.get("model"),
+                        response.body() == null ? "" : response.body().substring(0, Math.min(200, response.body().length())));
+                throw new IllegalStateException("HTTP " + response.statusCode());
+            }
             JsonNode body = objectMapper.readTree(response.body());
             Map<String, Object> result = extractJson(body.path("choices").path(0).path("message").path("content").asText(""));
             result.putIfAbsent("reply", ""); result.putIfAbsent("action", null); result.put("mode", "ai");
             return result;
         } catch (Exception ex) {
+            org.slf4j.LoggerFactory.getLogger(AiService.class)
+                .warn("AI 接口调用失败，降级到本地 FTS5 检索: {}", ex.getMessage());
             Map<String, Object> fallback = localFallback(message, scope, lifecycleOnly);
             fallback.put("reply", fallback.get("reply") + "\n\nAI 接口调用失败，已自动降级到本地 FTS5 检索（" + ex.getClass().getSimpleName() + "）。");
             return fallback;

@@ -13,9 +13,9 @@
 
     <groupId>com.xyblue</groupId>
     <artifactId>itemnest</artifactId>
-    <version>0.8.0</version>
+    <version>1.0.0</version>
     <name>ItemNest</name>
-    <description>ItemNest private inventory manager</description>
+    <description>ItemNest local-first inventory and life management hub</description>
 
     <properties>
         <java.version>21</java.version>

@@ -140,8 +140,10 @@ public class InventoryRepository {
             sql.append(" ORDER BY bm25(items_fts), i.updated_at DESC LIMIT ?");
             args.add(Math.max(1, Math.min(limit, 200)));
             return jdbc.queryForList(sql.toString(), args.toArray());
-        } catch (RuntimeException ex) {
-            return List.of();
+        } catch (org.springframework.dao.DataAccessException ex) {
+            org.slf4j.LoggerFactory.getLogger(InventoryRepository.class)
+                .warn("FTS5 search failed for query '{}', falling back to LIKE: {}", query, ex.getMessage());
+            return listItemsLike(query, containerId, ownerIds, lifecycleOnly, limit);
         }
     }
 
@@ -199,19 +201,104 @@ public class InventoryRepository {
     }
 
     public List<Map<String, Object>> createItemsBatch(long containerId, List<Map<String, Object>> rows) {
-        List<Map<String, Object>> created = new ArrayList<>();
+        if (rows.isEmpty()) return List.of();
+        Map<String, Object> container = getContainer(containerId);
+        if (container == null) throw new IllegalArgumentException("目标箱子不存在");
+        long ownerId = number(container.get("owner_id")).longValue();
+        // 规范化所有行
+        List<Object[]> batchArgs = new ArrayList<>(rows.size());
+        List<String> names = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
-            row.put("container_id", containerId);
-            row.putIfAbsent("quantity", 1); row.putIfAbsent("quantity_text", ""); row.putIfAbsent("condition", "正常"); row.putIfAbsent("notes", ""); row.putIfAbsent("tags", "");
-            created.add(createItem(row));
+            String name = string(row.get("name")).trim();
+            if (name.isEmpty()) throw new IllegalArgumentException("物品名称不能为空");
+            Integer qty = nullableInteger(row.getOrDefault("quantity", 1));
+            String qtyText = string(row.getOrDefault("quantity_text", "")).trim();
+            String condition = string(row.getOrDefault("condition", "正常")).trim();
+            if (condition.isEmpty()) condition = "正常";
+            String notes = string(row.getOrDefault("notes", "")).trim();
+            String tags = string(row.getOrDefault("tags", "")).trim();
+            batchArgs.add(new Object[]{ containerId, name, qty, qtyText, condition, notes, tags });
+            names.add(name);
+        }
+        // 一次 batchUpdate
+        int[] result = jdbc.batchUpdate("""
+            INSERT INTO items(container_id, name, quantity, quantity_text, condition, notes, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, batchArgs);
+        // 取回自增 id
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < result.length; i++) {
+            if (result[i] > 0) {
+                Long id = jdbc.queryForObject("SELECT last_insert_rowid() WHERE rowid = (SELECT max(rowid) FROM items WHERE name = ? AND container_id = ?)", Long.class, names.get(i), containerId);
+                if (id != null) ids.add(id);
+            }
+        }
+        // 批量刷新 FTS
+        if (!ids.isEmpty()) refreshFtsForItems(ids);
+        // 重新读回完整对象
+        List<Map<String, Object>> created = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Map<String, Object> item = getItem(id);
+            if (item != null) created.add(item);
         }
         return created;
     }
 
     public List<Map<String, Object>> updateItemsBatch(List<Long> ids, Map<String, Object> data) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Long id : ids) if (getItem(id) != null) result.add(updateItem(id, data));
+        if (ids.isEmpty() || data.isEmpty()) return List.of();
+        // 仅保留允许的字段
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : data.entrySet()) {
+            if (!ITEM_FIELDS.contains(e.getKey())) continue;
+            Object v = e.getValue();
+            if (v instanceof String s) v = s.trim();
+            normalized.put(e.getKey(), v);
+        }
+        if (normalized.isEmpty()) return List.of();
+        String setClause = normalized.keySet().stream().map(k -> k + " = ?").collect(Collectors.joining(", "));
+        String sql = "UPDATE items SET " + setClause + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        List<Object[]> batchArgs = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Object[] params = new Object[normalized.size() + 1];
+            int i = 0;
+            for (Object value : normalized.values()) params[i++] = value;
+            params[i] = id;
+            batchArgs.add(params);
+        }
+        jdbc.batchUpdate(sql, batchArgs);
+        refreshFtsForItems(ids);
+        // 重新读回
+        List<Map<String, Object>> result = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Map<String, Object> item = getItem(id);
+            if (item != null) result.add(item);
+        }
         return result;
+    }
+
+    /**
+     * 批量刷新 FTS 索引。先用单条 DELETE 清理 rowid 范围，再用单条 INSERT 写回，避免逐条刷新。
+     */
+    public void refreshFtsForItems(List<Long> itemIds) {
+        if (itemIds.isEmpty()) return;
+        try {
+            // 逐条删除 FTS 中的旧条目（rowid 与 item_id 相同）
+            List<Object[]> deleteArgs = itemIds.stream().map(id -> new Object[]{ id }).toList();
+            jdbc.batchUpdate("DELETE FROM items_fts WHERE rowid = ?", deleteArgs);
+            // 一次性插入所有 FTS 行
+            String placeholders = itemIds.stream().map(x -> "?").collect(Collectors.joining(","));
+            jdbc.update("""
+                INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
+                SELECT i.id, i.id, i.name, i.notes, i.tags, i.condition, c.name, m.name
+                FROM items i
+                JOIN containers c ON c.id = i.container_id
+                JOIN household_members m ON m.id = c.owner_id
+                WHERE i.id IN (""" + placeholders + ")",
+                itemIds.toArray());
+        } catch (RuntimeException ex) {
+            org.slf4j.LoggerFactory.getLogger(InventoryRepository.class)
+                .warn("refreshFtsForItems failed: {}", ex.getMessage());
+        }
     }
 
     public Map<String, Object> summary() { return summary(List.of()); }
@@ -255,8 +342,11 @@ public class InventoryRepository {
     public void refreshFtsForContainer(long containerId) {
         try {
             List<Long> ids = jdbc.queryForList("SELECT id FROM items WHERE container_id = ?", Long.class, containerId);
-            ids.forEach(this::refreshFtsForItem);
-        } catch (RuntimeException ignored) {}
+            refreshFtsForItems(ids);
+        } catch (RuntimeException ex) {
+            org.slf4j.LoggerFactory.getLogger(InventoryRepository.class)
+                .warn("refreshFtsForContainer({}) failed: {}", containerId, ex.getMessage());
+        }
     }
 
     public void deleteFtsForItem(long itemId) {
@@ -264,19 +354,26 @@ public class InventoryRepository {
     }
 
     private static String buildFtsQuery(String query) {
+        if (query == null) return "";
         LinkedHashSet<String> terms = new LinkedHashSet<>();
+        // ASCII：保持原样
         Matcher ascii = Pattern.compile("[A-Za-z0-9+_-]{2,}").matcher(query);
         while (ascii.find()) terms.add(ascii.group());
+        // 中文：只取整段 + 一组非冗余的滑窗子串
         Matcher han = Pattern.compile("[\\p{IsHan}]{2,}").matcher(query);
         while (han.find()) {
             String run = han.group();
-            if (run.length() <= 5) terms.add(run);
-            for (int len : List.of(4, 3, 2)) {
-                if (run.length() < len) continue;
-                for (int i = 0; i <= run.length() - len; i++) terms.add(run.substring(i, i + len));
+            terms.add(run);
+            // 长度 >5 时只取最长滑窗：4 字、3 字，去重靠 LinkedHashSet
+            if (run.length() > 4) {
+                for (int i = 0; i <= run.length() - 4; i++) terms.add(run.substring(i, i + 4));
+            }
+            if (run.length() > 3) {
+                for (int i = 0; i <= run.length() - 3; i++) terms.add(run.substring(i, i + 3));
             }
         }
-        return terms.stream().limit(24)
+        if (terms.isEmpty()) return "";
+        return terms.stream().limit(20)
             .map(term -> "\"" + term.replace("\"", "\"\"") + "\"*")
             .collect(Collectors.joining(" OR "));
     }

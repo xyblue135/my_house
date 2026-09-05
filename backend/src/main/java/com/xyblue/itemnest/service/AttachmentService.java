@@ -85,6 +85,33 @@ public class AttachmentService {
         return true;
     }
 
+    /**
+     * 启动时清理孤儿附件文件：磁盘上有但 DB 已无对应记录。
+     * 通过比对 attachments 表的 stored_name 集合与磁盘文件，过滤出多余文件。
+     */
+    public int purgeOrphanFiles() {
+        try (java.util.stream.Stream<Path> walk = Files.walk(root)) {
+            java.util.Set<String> referenced = new java.util.HashSet<>();
+            for (Map<String, Object> row : jdbc.queryForList("SELECT stored_name FROM attachments")) {
+                Object name = row.get("stored_name");
+                if (name != null) referenced.add(String.valueOf(name));
+            }
+            int[] counter = {0};
+            walk.filter(Files::isRegularFile).forEach(path -> {
+                String rel = root.relativize(path).toString().replace('\\', '/');
+                if (!referenced.contains(rel)) {
+                    try { Files.deleteIfExists(path); counter[0]++; }
+                    catch (IOException ignored) {}
+                }
+            });
+            return counter[0];
+        } catch (IOException ex) {
+            org.slf4j.LoggerFactory.getLogger(AttachmentService.class)
+                .warn("purgeOrphanFiles failed: {}", ex.getMessage());
+            return 0;
+        }
+    }
+
     private static String sanitizeFilename(String value) {
         String name = value == null || value.isBlank() ? "attachment" : Path.of(value).getFileName().toString();
         return name.replaceAll("[\\r\\n\\t]", "_").replaceAll("[\\\\/:*?\"<>|]", "_");

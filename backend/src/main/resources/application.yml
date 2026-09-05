@@ -14,6 +14,9 @@ spring:
 
 itemnest:
   data-dir: ${ITEMNEST_DATA_DIR:../data}
+  # 局域网模式鉴权：仅在 ITEMNEST_BIND_ADDRESS != 127.0.0.1 时生效。
+  # 设置后客户端必须通过 Authorization: Bearer <token> 或 X-ItemNest-Token 头携带相同值。
+  lan-token: ${ITEMNEST_LAN_TOKEN:}
   rabbitmq:
     enabled: ${ITEMNEST_RABBITMQ_ENABLED:false}
     url: ${ITEMNEST_RABBITMQ_URL:amqp://guest:guest@127.0.0.1/}
@@ -24,3 +27,6 @@ itemnest:
 logging:
   level:
     com.xyblue.itemnest: INFO
+    # 需要排查时可临时打开：
+    # com.xyblue.itemnest.repository: DEBUG
+    # com.xyblue.itemnest.service: DEBUG

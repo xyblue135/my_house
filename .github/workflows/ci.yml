@@ -2,37 +2,123 @@ name: CI
 
 on:
   push:
+    branches: [main, master]
   pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21'
+  NODE_VERSION: '22'
+  PNPM_VERSION: '11.21.0'
 
 jobs:
-  build:
+  backend:
+    name: Backend (Java ${{ env.JAVA_VERSION }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           cache: maven
+
+      - name: Run tests
+        working-directory: backend
+        run: mvn -B clean test
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-report
+          path: backend/target/surefire-reports
+          retention-days: 7
+
+  frontend:
+    name: Frontend (Node ${{ env.NODE_VERSION }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.21.0
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install frontend dependencies
-        run: pnpm --dir frontend install --no-frozen-lockfile
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
 
-      - name: Build frontend
-        run: pnpm --dir frontend build
+      - name: Type-check
+        working-directory: frontend
+        run: pnpm exec vue-tsc --noEmit
 
-      - name: Test and package backend
-        run: mvn -B -f backend/pom.xml clean test package
+      - name: Build
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Upload dist
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  package:
+    name: Spring Boot jar
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Build frontend for embedding
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install + build frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Package (skip tests, already run)
+        working-directory: backend
+        run: mvn -B clean package -DskipTests
+
+      - name: Upload executable jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: itemnest-jar
+          path: backend/target/*.jar
+          retention-days: 14

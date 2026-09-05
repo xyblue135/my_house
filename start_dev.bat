@@ -2,6 +2,9 @@
 setlocal
 pushd "%~dp0"
 
+set "JAVA_HOME=D:\4environment\Java\jdk-21.0.7"
+set "PATH=%JAVA_HOME%\bin;%PATH%"
+
 where java >nul 2>&1
 if errorlevel 1 (
   echo [ItemNest] Java was not found. JDK 21 or newer is required.

@@ -12,6 +12,8 @@ backend/target/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/.env.android.local
 
 # IDE / OS
 .idea/
@@ -21,3 +23,7 @@ frontend/.vite/
 # Patch artifacts
 *.patch
 data/
+
+# Legacy / one-off release bundles and stray pnpm workspace files
+*.bundle
+frontend/pnpm-workspace.yaml

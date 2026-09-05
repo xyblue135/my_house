@@ -10,6 +10,7 @@ import com.xyblue.itemnest.exception.ApiException;
 import com.xyblue.itemnest.repository.HistoryRepository;
 import com.xyblue.itemnest.repository.InventoryRepository;
 import com.xyblue.itemnest.repository.LifecycleRepository;
+import com.xyblue.itemnest.repository.LifeRepository;
 import com.xyblue.itemnest.service.AiService;
 import com.xyblue.itemnest.service.AttachmentService;
 import com.xyblue.itemnest.service.RabbitMqService;
@@ -28,14 +29,15 @@ public class ItemNestController {
     private final InventoryRepository repository;
     private final HistoryRepository history;
     private final LifecycleRepository lifecycle;
+    private final LifeRepository life;
     private final AttachmentService attachments;
     private final AiService aiService;
     private final RabbitMqService mq;
 
-    public ItemNestController(InventoryRepository repository, HistoryRepository history, LifecycleRepository lifecycle,
+    public ItemNestController(InventoryRepository repository, HistoryRepository history, LifecycleRepository lifecycle, LifeRepository life,
                               AttachmentService attachments, AiService aiService, RabbitMqService mq) {
         this.repository = repository; this.history = history; this.lifecycle = lifecycle;
-        this.attachments = attachments; this.aiService = aiService; this.mq = mq;
+        this.life = life; this.attachments = attachments; this.aiService = aiService; this.mq = mq;
     }
 
     @GetMapping("/members")
@@ -250,6 +252,76 @@ public class ItemNestController {
     @GetMapping("/settings") public Map<String, Object> getSettings() { return aiService.getSettings(false); }
     @PostMapping("/settings") public Map<String, Object> saveSettings(@RequestBody Map<String, Object> payload) { return aiService.saveSettings(payload); }
     @GetMapping("/mq/status") public Map<String, Object> mqStatus() { return mq.status(); }
+
+    @GetMapping("/life")
+    public List<Map<String, Object>> lifeEntries(@RequestParam(required=false) String kind,
+        @RequestParam(name="q", defaultValue="") String query,
+        @RequestParam(name="owner_id", required=false) Long ownerId,
+        @RequestParam(required=false) String status,
+        @RequestParam(required=false) Boolean archived,
+        @RequestParam(defaultValue="500") int limit) {
+        if (query.length() > 200) throw new ApiException(HttpStatus.BAD_REQUEST, "搜索关键词过长");
+        return life.list(kind, query, ownerId, status, archived == null ? false : archived, limit);
+    }
+
+    @GetMapping("/life/overview")
+    public Map<String, Object> lifeOverview() { return life.overview(); }
+
+    @GetMapping("/life/export")
+    public Map<String, Object> exportLife() {
+        return Map.of("version", 1, "exported_at", java.time.LocalDateTime.now().toString(), "entries", life.list(null, "", null, null, null, 1000));
+    }
+
+    @PostMapping("/life/import")
+    public Map<String, Object> importLife(@RequestBody Map<String, Object> payload) {
+        List<Map<String, Object>> entries = mapList(payload.get("entries"));
+        if (entries.isEmpty() || entries.size() > 1000) throw new ApiException(HttpStatus.BAD_REQUEST, "导入需要 1-1000 条有效记录");
+        return Map.of("imported", life.importEntries(entries));
+    }
+
+    @PostMapping("/life")
+    public Map<String, Object> addLifeEntry(@RequestBody Map<String, Object> payload) {
+        requireName(payload.get("kind"), "功能类型不能为空");
+        requireName(payload.get("title"), "标题不能为空");
+        long ownerId = payload.get("owner_id") == null ? 1 : requireId(payload.get("owner_id"), "家庭成员不存在");
+        requireMember(ownerId); payload.put("owner_id", ownerId);
+        return life.create(payload);
+    }
+
+    @PatchMapping("/life/{id}")
+    public Map<String, Object> patchLifeEntry(@PathVariable long id, @RequestBody Map<String, Object> payload) {
+        if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
+        if (payload.containsKey("owner_id")) requireMember(requireId(payload.get("owner_id"), "家庭成员不存在"));
+        if (payload.containsKey("title")) requireName(payload.get("title"), "标题不能为空");
+        Map<String, Object> result = life.update(id, payload);
+        if (result == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
+        return result;
+    }
+
+    @DeleteMapping("/life/{id}")
+    public Map<String, Object> deleteLifeEntry(@PathVariable long id) {
+        if (!life.delete(id)) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
+        return Map.of("ok", true);
+    }
+
+    @PutMapping("/life/{id}/checkins/{date}")
+    public Map<String, Object> checkin(@PathVariable long id, @PathVariable String date, @RequestBody(required=false) Map<String, Object> payload) {
+        if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
+        Map<String, Object> body = payload == null ? Map.of() : payload;
+        double value = body.get("value") == null ? 1 : Double.parseDouble(String.valueOf(body.get("value")));
+        return life.checkin(id, date, value, String.valueOf(body.getOrDefault("note", "")));
+    }
+
+    @DeleteMapping("/life/{id}/checkins/{date}")
+    public Map<String, Object> removeCheckin(@PathVariable long id, @PathVariable String date) {
+        return Map.of("ok", life.removeCheckin(id, date));
+    }
+
+    @GetMapping("/life/{id}/checkins")
+    public List<Map<String, Object>> checkins(@PathVariable long id, @RequestParam(defaultValue="90") int limit) {
+        if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
+        return life.checkins(id, limit);
+    }
 
     @PostMapping("/chat")
     public Map<String, Object> chat(@RequestBody Map<String, Object> payload) {

@@ -37,3 +37,18 @@ export interface AiSettings { base_url: string; model: string; has_api_key: bool
 export interface MqStatus { enabled: boolean; connected: boolean; url: string; exchange: string; queue: string; last_error: string; client: string }
 export interface AiAction { type: string; item_id?: number; container_id?: number; data?: Record<string, unknown> }
 export interface ChatResponse { reply: string; action: AiAction | null; mode: 'ai' | 'local' }
+
+export interface LifeEntry {
+  id: number; owner_id: number; owner_name: string; kind: string; title: string; content: string;
+  status: 'ACTIVE'|'DONE'|'PAUSED'|'CANCELLED'|string; priority: number; category: string; tags: string;
+  amount?: number | null; currency: string; occurred_at?: string | null; due_at?: string | null;
+  start_at?: string | null; end_at?: string | null; repeat_rule: string; progress: number;
+  target_value?: number | null; unit: string; url: string; location: string; contact: string;
+  extra_json: string; pinned: number | boolean; archived: number | boolean; completed_at?: string | null;
+  checked_today?: number | boolean; checkin_count?: number; created_at: string; updated_at: string;
+}
+
+export interface LifeOverview {
+  total: number; open_tasks: number; due_today: number; pinned: number;
+  income_month: number; expense_month: number; by_kind: Array<{kind:string; count:number}>;
+}

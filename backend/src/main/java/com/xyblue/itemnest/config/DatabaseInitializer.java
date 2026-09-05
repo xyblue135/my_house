@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xyblue.itemnest.service.AttachmentService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.ClassPathResource;
@@ -15,10 +16,12 @@ import org.springframework.stereotype.Component;
 public class DatabaseInitializer implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final AttachmentService attachments;
 
-    public DatabaseInitializer(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public DatabaseInitializer(JdbcTemplate jdbc, ObjectMapper objectMapper, AttachmentService attachments) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.attachments = attachments;
     }
 
     @Override
@@ -26,12 +29,100 @@ public class DatabaseInitializer implements ApplicationRunner {
         createBaseSchema();
         migrateHousehold();
         createV08Schema();
+        createLifeHubSchema();
+        createFtsTriggers();
 
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM containers", Integer.class);
         if (count != null && count == 0) seedFreshDatabase();
 
-        rebuildFtsIndex();
+        // 首次启动重建 FTS；之后由 trigger 维护
+        boolean ftsBuilt = isMigrationApplied("2026-08-31-v1-fts-triggers");
+        if (!ftsBuilt) {
+            rebuildFtsIndex();
+            jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-31-v1-fts-triggers");
+        }
         jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-19-v0.8-household-history-lifecycle-fts");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-21-v1-life-hub");
+
+        // 清理孤儿附件文件（磁盘上有但 DB 已无）
+        try {
+            int purged = attachments.purgeOrphanFiles();
+            if (purged > 0) org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
+                .info("启动时清理 {} 个孤儿附件文件", purged);
+        } catch (Exception ex) {
+            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
+                .warn("孤儿附件清理失败: {}", ex.getMessage());
+        }
+    }
+
+    private boolean isMigrationApplied(String key) {
+        try {
+            Integer c = jdbc.queryForObject("SELECT COUNT(*) FROM migrations WHERE key = ?", Integer.class, key);
+            return c != null && c > 0;
+        } catch (Exception ex) { return false; }
+    }
+
+    /**
+     * FTS5 同步 trigger：items / containers / household_members 变更时自动维护 items_fts。
+     * 增/改/删都覆盖；旧代码里的 refreshFtsForItem 仍可作为手动修复入口。
+     */
+    private void createFtsTriggers() {
+        try {
+            jdbc.execute("DROP TRIGGER IF EXISTS items_ai");
+            jdbc.execute("DROP TRIGGER IF EXISTS items_ad");
+            jdbc.execute("DROP TRIGGER IF EXISTS items_au");
+            jdbc.execute("DROP TRIGGER IF EXISTS containers_au_fts");
+            jdbc.execute("DROP TRIGGER IF EXISTS members_au_fts");
+            jdbc.execute("""
+                CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
+                    INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
+                    SELECT NEW.id, NEW.id, NEW.name, NEW.notes, NEW.tags, NEW.condition, c.name, m.name
+                    FROM containers c JOIN household_members m ON m.id = c.owner_id
+                    WHERE c.id = NEW.container_id;
+                END
+                """);
+            jdbc.execute("""
+                CREATE TRIGGER items_ad AFTER DELETE ON items BEGIN
+                    DELETE FROM items_fts WHERE rowid = OLD.id;
+                END
+                """);
+            jdbc.execute("""
+                CREATE TRIGGER items_au AFTER UPDATE ON items BEGIN
+                    DELETE FROM items_fts WHERE rowid = OLD.id;
+                    INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
+                    SELECT NEW.id, NEW.id, NEW.name, NEW.notes, NEW.tags, NEW.condition, c.name, m.name
+                    FROM containers c JOIN household_members m ON m.id = c.owner_id
+                    WHERE c.id = NEW.container_id;
+                END
+                """);
+            jdbc.execute("""
+                CREATE TRIGGER containers_au_fts AFTER UPDATE OF name ON containers BEGIN
+                    DELETE FROM items_fts WHERE rowid IN (SELECT id FROM items WHERE container_id = OLD.id);
+                    INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
+                    SELECT i.id, i.id, i.name, i.notes, i.tags, i.condition, c.name, m.name
+                    FROM items i JOIN containers c ON c.id = i.container_id
+                    WHERE c.id = NEW.id;
+                END
+                """);
+            jdbc.execute("""
+                CREATE TRIGGER members_au_fts AFTER UPDATE OF name ON household_members BEGIN
+                    DELETE FROM items_fts WHERE rowid IN (
+                        SELECT i.id FROM items i
+                        JOIN containers c ON c.id = i.container_id
+                        WHERE c.owner_id = OLD.id
+                    );
+                    INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
+                    SELECT i.id, i.id, i.name, i.notes, i.tags, i.condition, c.name, m.name
+                    FROM items i
+                    JOIN containers c ON c.id = i.container_id
+                    WHERE c.owner_id = NEW.id;
+                END
+                """);
+        } catch (RuntimeException ex) {
+            // FTS5 / trigger 不可用时回退到手动刷新
+            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
+                .warn("FTS5 triggers 创建失败，回退到手动刷新: {}", ex.getMessage());
+        }
     }
 
     private void createBaseSchema() {
@@ -161,6 +252,59 @@ public class DatabaseInitializer implements ApplicationRunner {
             // The normal xerial SQLite build includes FTS5. If a custom build does not,
             // InventoryRepository transparently falls back to LIKE search.
         }
+    }
+
+    private void createLifeHubSchema() {
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS life_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL DEFAULT 1,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'ACTIVE',
+                priority INTEGER NOT NULL DEFAULT 0,
+                category TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '',
+                amount REAL,
+                currency TEXT NOT NULL DEFAULT 'CNY',
+                occurred_at TEXT,
+                due_at TEXT,
+                start_at TEXT,
+                end_at TEXT,
+                repeat_rule TEXT NOT NULL DEFAULT '',
+                progress REAL NOT NULL DEFAULT 0,
+                target_value REAL,
+                unit TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                location TEXT NOT NULL DEFAULT '',
+                contact TEXT NOT NULL DEFAULT '',
+                extra_json TEXT NOT NULL DEFAULT '{}',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0,
+                completed_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(owner_id) REFERENCES household_members(id) ON DELETE RESTRICT
+            )
+            """);
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_kind ON life_entries(kind, archived, updated_at DESC)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_owner ON life_entries(owner_id, archived, updated_at DESC)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_due ON life_entries(due_at, status, archived)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_occurred ON life_entries(occurred_at DESC, kind)");
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS life_checkins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id INTEGER NOT NULL,
+                checkin_date TEXT NOT NULL,
+                value REAL NOT NULL DEFAULT 1,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(entry_id, checkin_date),
+                FOREIGN KEY(entry_id) REFERENCES life_entries(id) ON DELETE CASCADE
+            )
+            """);
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_checkins_entry ON life_checkins(entry_id, checkin_date DESC)");
     }
 
     private boolean hasColumn(String table, String column) {
