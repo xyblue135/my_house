@@ -20,38 +20,29 @@ const current = computed(() => route.name as string)
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">IN</div>
-        <div class="brand-name">ItemNest</div>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">IN</div>
+      <div class="brand-name">ItemNest</div>
+    </div>
+    <nav class="nav-list">
+      <button
+        v-for="item in navItems"
+        :key="item.name"
+        class="nav-btn"
+        :class="{ active: current === item.name }"
+        @click="router.push({ name: item.name })">
+        <span>{{ item.icon }}</span>
+        <em>{{ item.label }}</em>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="owner-picker">
+        <label>当前视角</label>
+        <select :value="store.selectedOwnerId" @change="store.setOwner(Number(($event.target as HTMLSelectElement).value))">
+          <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
+        </select>
       </div>
-      <nav class="nav">
-        <button
-          v-for="item in navItems"
-          :key="item.name"
-          class="nav-item"
-          :class="{ active: current === item.name }"
-          @click="router.push({ name: item.name })">
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span class="nav-label">{{ item.label }}</span>
-        </button>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="owner-picker">
-          <label>当前视角</label>
-          <select :value="store.selectedOwnerId" @change="store.setOwner(Number(($event.target as HTMLSelectElement).value))">
-            <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
-          </select>
-        </div>
-      </div>
-    </aside>
-    <main class="main-area">
-      <router-view v-slot="{ Component }">
-        <keep-alive :max="4">
-          <component :is="Component" />
-        </keep-alive>
-      </router-view>
-    </main>
-  </div>
+    </div>
+  </aside>
 </template>

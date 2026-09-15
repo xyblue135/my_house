@@ -25,3 +25,9 @@ body.modal-open{overflow:hidden}.storage-toolbar{margin-bottom:10px}.privacy-hin
 
 /* ===== Inline skeleton loaders (取代全屏占位) ===== */
 @keyframes skeleton-shimmer{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}.skeleton{display:block;background:linear-gradient(90deg,#eef0f5 0%,#f7f8fb 50%,#eef0f5 100%);background-size:200px 100%;background-repeat:no-repeat;border-radius:8px;color:transparent!important;animation:skeleton-shimmer 1.4s linear infinite;user-select:none}.skeleton-line{height:10px;margin:6px 0}.skeleton-line.short{width:42%}.skeleton-line.mid{width:64%}.skeleton-line.long{width:88%}.skeleton-circle{border-radius:50%;width:40px;height:40px}.skeleton-card{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff}.skeleton-stack{display:grid;gap:9px}
+
+/* ===== Sidebar owner picker (AppShell) ===== */
+.owner-picker{display:grid;gap:6px;width:100%}
+.owner-picker label{font-size:10px;color:#8e99aa;letter-spacing:.04em}
+.owner-picker select{width:100%;background:#182235;color:#e7eaf0;border:1px solid #2a3447;border-radius:9px;padding:8px 10px;font-size:12px;outline:none;cursor:pointer}
+.owner-picker select:focus{border-color:#6d5dfc}
