@@ -6,14 +6,14 @@ export interface Dashboard { summary: Summary; members: MemberSummary[]; lifecyc
 
 export interface Container {
   id: number; name: string; notes: string; owner_id: number; owner_name: string;
-  item_count: number; quantity_sum: number; attachment_count?: number; created_at?: string; updated_at?: string
+  item_count: number; quantity_sum: number; attachment_count?: number; cover_attachment_id?: number | null; created_at?: string; updated_at?: string
 }
 
 export interface Item {
   id: number; container_id: number; container_name: string; owner_id: number; owner_name: string;
   name: string; quantity: number | null; quantity_text: string; condition: string; notes: string; tags: string;
   lifecycle_type?: string | null; lifecycle_start_date?: string | null; expiry_date?: string | null;
-  remind_days?: number | null; lifecycle_notes?: string | null; attachment_count?: number;
+  remind_days?: number | null; lifecycle_notes?: string | null; attachment_count?: number; cover_attachment_id?: number | null;
   created_at?: string; updated_at?: string
 }
 

@@ -39,7 +39,9 @@ public class InventoryRepository {
     public List<Map<String, Object>> listContainers(Long ownerId) {
         String sql = """
             SELECT c.*, m.name AS owner_name, COUNT(i.id) AS item_count,
-                   COALESCE(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE COALESCE(i.quantity, 1) END), 0) AS quantity_sum
+                   COALESCE(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE COALESCE(i.quantity, 1) END), 0) AS quantity_sum,
+                   (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
+                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM containers c
             JOIN household_members m ON m.id = c.owner_id
             LEFT JOIN items i ON i.container_id = c.id
@@ -51,7 +53,9 @@ public class InventoryRepository {
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT c.*, m.name AS owner_name,
                    (SELECT COUNT(*) FROM items i WHERE i.container_id = c.id) AS item_count,
-                   (SELECT COALESCE(SUM(COALESCE(i.quantity, 1)),0) FROM items i WHERE i.container_id = c.id) AS quantity_sum
+                   (SELECT COALESCE(SUM(COALESCE(i.quantity, 1)),0) FROM items i WHERE i.container_id = c.id) AS quantity_sum,
+                   (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
+                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM containers c JOIN household_members m ON m.id = c.owner_id WHERE c.id = ?
             """, id);
         return rows.isEmpty() ? null : rows.getFirst();
@@ -99,7 +103,8 @@ public class InventoryRepository {
             SELECT i.*, c.name AS container_name, c.owner_id, m.name AS owner_name,
                    l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
                    l.remind_days, l.notes AS lifecycle_notes,
-                   (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count
+                   (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
+                   (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM items i
             JOIN containers c ON c.id = i.container_id
             JOIN household_members m ON m.id = c.owner_id
@@ -127,6 +132,7 @@ public class InventoryRepository {
                        l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
                        l.remind_days, l.notes AS lifecycle_notes,
                        (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
+                       (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
                        bm25(items_fts) AS search_rank
                 FROM items_fts
                 JOIN items i ON i.id = CAST(items_fts.item_id AS INTEGER)
@@ -161,7 +167,8 @@ public class InventoryRepository {
             SELECT i.*, c.name AS container_name, c.owner_id, m.name AS owner_name,
                    l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
                    l.remind_days, l.notes AS lifecycle_notes,
-                   (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count
+                   (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
+                   (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM items i
             JOIN containers c ON c.id = i.container_id
             JOIN household_members m ON m.id = c.owner_id

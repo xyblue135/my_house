@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { RecycleScroller } from 'vue-virtual-scroller'
-import { api } from '../api'
+import { api, attachmentUrl } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
 import { useItemModals } from '../composables/useItemModals'
@@ -119,7 +119,10 @@ onMounted(() => {
         v-slot="{ item }">
         <article class="item-card">
           <div class="item-top">
-            <div class="item-icon">{{ firstChar(item.name) }}</div>
+            <div class="item-icon thumb">
+              <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+              <template v-else>{{ firstChar(item.name) }}</template>
+            </div>
             <div class="item-actions">
               <button class="icon-btn" @click="onItemEdit(item)">✎</button>
               <button class="icon-btn danger" @click="onItemDelete(item)">×</button>
@@ -150,13 +153,14 @@ onMounted(() => {
       <RecycleScroller
         v-if="filteredContainers.length"
         :items="filteredContainers"
-        :item-size="160"
+        :item-size="240"
         key-field="id"
         class="virtual-list containers-grid"
         v-slot="{ item }">
         <article class="container-card" @click="openContainerDetail(item.id)">
-          <div class="container-card-top">
-            <div class="box-mark">▦</div>
+          <div class="container-cover">
+            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+            <div v-else class="container-cover-empty">▦</div>
             <span class="owner-badge">{{ item.owner_name }}</span>
           </div>
           <h4>{{ item.name }}</h4>
@@ -204,7 +208,10 @@ onMounted(() => {
     <div class="modal container-detail-modal">
       <div class="container-detail-head">
         <div class="container-detail-title-wrap">
-          <div class="box-mark large">▦</div>
+          <div class="container-detail-cover">
+            <img v-if="openContainer.cover_attachment_id" :src="attachmentUrl(openContainer.cover_attachment_id)" alt="" />
+            <div v-else class="box-mark large">▦</div>
+          </div>
           <div>
             <p class="eyebrow">{{ openContainer.owner_name }} / CONTAINER</p>
             <h3>{{ openContainer.name }}</h3>
@@ -223,7 +230,10 @@ onMounted(() => {
       </div>
       <div v-if="openContainerItems.length" class="container-detail-items">
         <article v-for="item in openContainerItems" :key="item.id" class="container-item-row">
-          <div class="container-item-icon">{{ firstChar(item.name) }}</div>
+          <div class="container-item-icon thumb">
+            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+            <template v-else>{{ firstChar(item.name) }}</template>
+          </div>
           <div class="container-item-main">
             <h4>{{ item.name }}</h4>
             <p>{{ item.notes }}</p>

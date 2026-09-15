@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useAppStore } from '../store'
+import { attachmentUrl } from '../api'
+import ImageCropModal from './ImageCropModal.vue'
 
 const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
@@ -82,8 +84,10 @@ function formatTime(value?: string | null) {
             </figure>
           </div>
           <div v-if="modals.itemAttachments.length" class="attachment-list">
-            <div v-for="a in modals.itemAttachments" :key="a.id">
-              <a :href="modals.apiUrl(`/api/attachments/${a.id}/content`)" target="_blank">{{ a.kind === 'image' ? '🖼' : '📎' }} {{ a.filename }}</a>
+            <div v-for="a in modals.itemAttachments" :key="a.id" class="attachment-row">
+              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" />
+              <span v-else class="attachment-file">📎</span>
+              <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteAttachment(a)">删除</button>
             </div>
           </div>
@@ -123,8 +127,10 @@ function formatTime(value?: string | null) {
             </figure>
           </div>
           <div v-if="modals.containerAttachments.length" class="attachment-list">
-            <div v-for="a in modals.containerAttachments" :key="a.id">
-              <a :href="modals.apiUrl(`/api/attachments/${a.id}/content`)" target="_blank">🖼 {{ a.filename }}</a>
+            <div v-for="a in modals.containerAttachments" :key="a.id" class="attachment-row">
+              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" />
+              <span v-else class="attachment-file">📎</span>
+              <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteContainerAttachment(a)">删除</button>
             </div>
           </div>
@@ -218,4 +224,12 @@ function formatTime(value?: string | null) {
       </div>
     </div>
   </div>
+
+  <!-- Image crop modal -->
+  <ImageCropModal
+    v-if="modals.cropOpen && modals.cropFile"
+    :file="modals.cropFile"
+    @confirm="modals.onCropConfirm"
+    @skip="modals.onCropSkip"
+    @cancel="modals.onCropCancel" />
 </template>

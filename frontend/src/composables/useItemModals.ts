@@ -2,7 +2,7 @@ import { computed, inject, provide, reactive, ref, type InjectionKey } from 'vue
 import { api, apiUrl } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from './useToast'
-import { compressFiles, objectUrl } from '../utils/image'
+import { compressFiles, compressImage, objectUrl } from '../utils/image'
 import type { Attachment, Container, HistoryEntry, Item } from '../types'
 
 interface QuickRow { name: string; quantity: string; quantity_text: string }
@@ -66,6 +66,12 @@ export interface ItemModals {
   openHistory: (container: Container) => Promise<void>
   undoHistory: (entry: HistoryEntry, onSaved: () => Promise<void> | void) => Promise<void>
   apiUrl: (path: string) => string
+  cropOpen: boolean
+  cropFile: File | null
+  cropTarget: 'item' | 'container'
+  onCropConfirm: (cropped: File) => void
+  onCropSkip: () => void
+  onCropCancel: () => void
 }
 
 const KEY: InjectionKey<ItemModals> = Symbol('itemnest.modals')
@@ -113,6 +119,10 @@ function createItemModalsImpl(): ItemModals {
   const historyModalOpen = ref(false)
   const containerHistory = ref<HistoryEntry[]>([])
   const historyContainerName = ref('')
+  const cropOpen = ref(false)
+  const cropFile = ref<File | null>(null)
+  const cropTarget = ref<'item' | 'container'>('item')
+  const cropQueue = ref<File[]>([])
 
   // ---- 内部 actions（先声明，return 时引用） ----
   function revokeUrls(urls: string[]) {
@@ -258,9 +268,63 @@ function createItemModalsImpl(): ItemModals {
 
   async function setContainerFiles(event: Event) {
     const files = Array.from((event.target as HTMLInputElement).files || [])
-    revokeUrls(containerPreviews.value)
-    containerPendingFiles.value = await compressFiles(files)
-    containerPreviews.value = containerPendingFiles.value.map(objectUrl)
+    await handleFiles(files, 'container')
+    ;(event.target as HTMLInputElement).value = ''
+  }
+
+  function updatePreviews(target: 'item' | 'container') {
+    if (target === 'item') {
+      revokeUrls(pendingPreviews.value)
+      pendingPreviews.value = pendingFiles.value.map(objectUrl)
+    } else {
+      revokeUrls(containerPreviews.value)
+      containerPreviews.value = containerPendingFiles.value.map(objectUrl)
+    }
+  }
+
+  function addPending(file: File, target: 'item' | 'container') {
+    if (target === 'item') pendingFiles.value.push(file)
+    else containerPendingFiles.value.push(file)
+    updatePreviews(target)
+  }
+
+  function processCropQueue() {
+    const next = cropQueue.value.shift()
+    if (!next) { cropOpen.value = false; cropFile.value = null; return }
+    cropFile.value = next
+    cropOpen.value = true
+  }
+
+  async function handleFiles(files: File[], target: 'item' | 'container') {
+    const images = files.filter(f => f.type.startsWith('image/'))
+    const others = files.filter(f => !f.type.startsWith('image/'))
+    if (others.length) {
+      const compressed = await compressFiles(others)
+      if (target === 'item') pendingFiles.value.push(...compressed)
+      else containerPendingFiles.value.push(...compressed)
+      updatePreviews(target)
+    }
+    if (images.length) {
+      cropTarget.value = target
+      cropQueue.value.push(...images)
+      processCropQueue()
+    }
+  }
+
+  async function onCropConfirm(cropped: File) {
+    addPending(await compressImage(cropped), cropTarget.value)
+    processCropQueue()
+  }
+
+  async function onCropSkip() {
+    if (cropFile.value) addPending(await compressImage(cropFile.value), cropTarget.value)
+    processCropQueue()
+  }
+
+  function onCropCancel() {
+    cropQueue.value = []
+    cropOpen.value = false
+    cropFile.value = null
   }
 
   async function saveContainer(onSaved: () => Promise<void> | void) {
@@ -410,9 +474,8 @@ function createItemModalsImpl(): ItemModals {
     deleteAttachment,
     onFiles: async (event: Event) => {
       const files = Array.from((event.target as HTMLInputElement).files || [])
-      revokeUrls(pendingPreviews.value)
-      pendingFiles.value = await compressFiles(files)
-      pendingPreviews.value = pendingFiles.value.map(objectUrl)
+      await handleFiles(files, 'item')
+      ;(event.target as HTMLInputElement).value = ''
     },
     openAddContainer() {
       containerEditingId.value = null
@@ -464,5 +527,14 @@ function createItemModalsImpl(): ItemModals {
     openHistory,
     undoHistory,
     apiUrl,
+    get cropOpen() { return cropOpen.value },
+    set cropOpen(v) { cropOpen.value = v },
+    get cropFile() { return cropFile.value },
+    set cropFile(v) { cropFile.value = v },
+    get cropTarget() { return cropTarget.value },
+    set cropTarget(v) { cropTarget.value = v },
+    onCropConfirm,
+    onCropSkip,
+    onCropCancel,
   })
 }

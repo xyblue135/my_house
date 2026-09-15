@@ -22,6 +22,17 @@ export function setLanToken(value: string | null): void {
   else localStorage.removeItem('itemnest.lanToken')
 }
 
+/**
+ * 附件内容 URL，供 <img>/<a> 直接使用。
+ * <img> 标签不会带 Authorization 头，所以局域网模式下把 token 拼进 ?token=，
+ * 后端 LanAuthFilter 会从 query 里识别（三种来源之一）。
+ */
+export function attachmentUrl(id: number | null | undefined): string {
+  if (id == null) return ''
+  const base = apiUrl(`/api/attachments/${id}/content`)
+  return runtimeLanToken ? `${base}?token=${encodeURIComponent(runtimeLanToken)}` : base
+}
+
 export interface ApiOptions extends Omit<RequestInit, 'signal'> {
   /** 请求超时毫秒数；默认 15000。 */
   timeoutMs?: number

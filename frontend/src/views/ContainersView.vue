@@ -4,6 +4,7 @@ import { RecycleScroller } from 'vue-virtual-scroller'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
+import { attachmentUrl } from '../api'
 
 const store = useAppStore()
 const modals = useItemModals()
@@ -30,13 +31,14 @@ function onItemSaved() { return refreshData() }
     <RecycleScroller
       v-if="filteredContainers.length"
       :items="filteredContainers"
-      :item-size="160"
+      :item-size="240"
       key-field="id"
       class="virtual-list containers-grid"
       v-slot="{ item }">
       <article class="container-card" @click="modals.openHistory(item)">
-        <div class="container-card-top">
-          <div class="box-mark">▦</div>
+        <div class="container-cover">
+          <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+          <div v-else class="container-cover-empty">▦</div>
           <span class="owner-badge">{{ item.owner_name }}</span>
         </div>
         <h4>{{ item.name }}</h4>
