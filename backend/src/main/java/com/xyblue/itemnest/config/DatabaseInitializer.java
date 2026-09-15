@@ -33,6 +33,8 @@ public class DatabaseInitializer implements ApplicationRunner {
         createV08Schema();
         migrateContainerAttachments();
         createLifeHubSchema();
+        createRecipesSchema();
+        migrateRecipeAttachments();
         createFtsTriggers();
 
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM containers", Integer.class);
@@ -349,6 +351,32 @@ public class DatabaseInitializer implements ApplicationRunner {
             )
             """);
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_checkins_entry ON life_checkins(entry_id, checkin_date DESC)");
+    }
+
+    /**
+     * 炒菜中心：食谱表（标题 + 文字步骤），图片/视频附件通过 attachments.recipe_id 关联。
+     */
+    private void createRecipesSchema() {
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS recipes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                steps TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_recipes_id ON recipes(id)");
+    }
+
+    /**
+     * 附件表支持食谱维度：新增 recipe_id 列（可空），视频 kind。
+     */
+    private void migrateRecipeAttachments() {
+        if (!hasColumn("attachments", "recipe_id")) {
+            jdbc.execute("ALTER TABLE attachments ADD COLUMN recipe_id INTEGER");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attachments_recipe ON attachments(recipe_id, id)");
+        }
     }
 
     /**

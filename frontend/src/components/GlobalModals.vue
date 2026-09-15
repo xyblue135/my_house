@@ -58,23 +58,22 @@ function formatTime(value?: string | null) {
         <label>数量<input v-model="modals.itemForm.quantity" type="number" min="0" /></label>
         <div class="span-2 option-panel">
           <label class="switch-line">
-            <input v-model="modals.itemForm.lifecycle_enabled" type="checkbox" />
-            <b>生命周期（可选）</b>
-            <span>食品、电池、保修、更换、检查统一放这里</span>
+            <input v-model="modals.itemForm.expiry_enabled" type="checkbox" />
+            <b>有效期（可选）</b>
+            <span>食品、药品等有保质期的东西</span>
           </label>
-          <div v-if="modals.itemForm.lifecycle_enabled" class="life-form">
-            <label>类型
-              <select v-model="modals.itemForm.lifecycle_type">
-                <option value="EXPIRY">有效期 / 保质期</option>
-                <option value="WARRANTY">保修</option>
-                <option value="REPLACE">建议更换</option>
-                <option value="CHECK">定期检查</option>
+          <div v-if="modals.itemForm.expiry_enabled" class="life-form">
+            <label class="span-2">计算方式
+              <select v-model="modals.itemForm.expiry_mode">
+                <option value="days">生产时间 + 天数自动算</option>
+                <option value="date">直接填截止日期</option>
               </select>
             </label>
-            <label>开始日期<input v-model="modals.itemForm.start_date" type="date" /></label>
-            <label>目标 / 到期日期<input v-model="modals.itemForm.expiry_date" type="date" /></label>
-            <label>提前提醒（天）<input v-model="modals.itemForm.remind_days" type="number" min="0" /></label>
-            <label class="span-2">生命周期备注<input v-model="modals.itemForm.lifecycle_notes" placeholder="如：开封后冷藏 / 3 年更换一次" /></label>
+            <template v-if="modals.itemForm.expiry_mode === 'days'">
+              <label>生产时间<input v-model="modals.itemForm.start_date" type="date" /></label>
+              <label>有效天数<input v-model="modals.itemForm.valid_days" type="number" min="1" /></label>
+            </template>
+            <label v-else>截止日期<input v-model="modals.itemForm.expiry_date" type="date" /></label>
           </div>
         </div>
         <div class="span-2 option-panel">

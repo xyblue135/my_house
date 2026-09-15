@@ -7,6 +7,7 @@ import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
+import { daysLeftShort, daysLeft } from '../utils/expiry'
 import type { Container, Item } from '../types'
 
 const store = useAppStore()
@@ -72,6 +73,7 @@ const itemsByContainer = computed(() => {
 })
 function itemsInContainer(containerId: number): Item[] { return itemsByContainer.value.get(containerId) ?? [] }
 function onItemEdit(item: Item) { modals.openEditItem(item) }
+function itemExpired(item: Item): boolean { const n = daysLeft(item.expiry_date); return n != null && n < 0 }
 
 // 编辑排序模式：进入后卡片显示上移/下移，点保存调 reorder API
 const editingSort = ref(false)
@@ -143,7 +145,6 @@ async function saveSort() {
         </template>
         <template v-else>
           <button class="outline-btn" @click="enterSortMode">编辑排序</button>
-          <button class="outline-btn" @click="modals.openBatch">批量操作</button>
           <button class="primary-btn" @click="openAddContainer">＋ 新建箱子</button>
         </template>
       </div>
@@ -179,7 +180,9 @@ async function saveSort() {
         </div>
         <h4>{{ item.name }}</h4>
         <div class="item-chips">
-          <button v-for="it in itemsInContainer(item.id)" :key="it.id" class="item-chip" @click.stop="onItemEdit(it)">{{ it.name }}</button>
+          <button v-for="it in itemsInContainer(item.id)" :key="it.id" class="item-chip" :class="{ 'chip-expired': itemExpired(it) }" @click.stop="onItemEdit(it)">
+            {{ it.name }}<span v-if="daysLeftShort(it.expiry_date)" class="chip-days">{{ daysLeftShort(it.expiry_date) }}</span>
+          </button>
           <span v-if="!itemsInContainer(item.id).length" class="muted">暂无物品</span>
         </div>
         <p>{{ item.notes || '空备注' }}</p>

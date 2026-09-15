@@ -1,12 +1,10 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/inventory' },
-  { path: '/inventory', name: 'inventory', component: () => import('./views/InventoryView.vue'), meta: { title: '物品总览' } },
+  { path: '/', redirect: '/containers' },
   { path: '/containers', name: 'containers', component: () => import('./views/ContainersView.vue'), meta: { title: '箱子' } },
-  { path: '/lifecycle', name: 'lifecycle', component: () => import('./views/LifecycleView.vue'), meta: { title: '生命周期' } },
-  { path: '/life', name: 'life', component: () => import('./views/LifeView.vue'), meta: { title: '生活中心' } },
-  { path: '/assistant', name: 'assistant', component: () => import('./views/AssistantView.vue'), meta: { title: '智能助手' } },
+  { path: '/billing', name: 'billing', component: () => import('./views/BillingView.vue'), meta: { title: '账单中心' } },
+  { path: '/cooking', name: 'cooking', component: () => import('./views/CookingView.vue'), meta: { title: '炒菜中心' } },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { title: '设置' } },
 ]
 

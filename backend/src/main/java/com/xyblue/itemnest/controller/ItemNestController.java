@@ -11,6 +11,7 @@ import com.xyblue.itemnest.repository.HistoryRepository;
 import com.xyblue.itemnest.repository.InventoryRepository;
 import com.xyblue.itemnest.repository.LifecycleRepository;
 import com.xyblue.itemnest.repository.LifeRepository;
+import com.xyblue.itemnest.repository.RecipeRepository;
 import com.xyblue.itemnest.service.AiService;
 import com.xyblue.itemnest.service.AttachmentService;
 import com.xyblue.itemnest.service.RabbitMqService;
@@ -30,14 +31,15 @@ public class ItemNestController {
     private final HistoryRepository history;
     private final LifecycleRepository lifecycle;
     private final LifeRepository life;
+    private final RecipeRepository recipes;
     private final AttachmentService attachments;
     private final AiService aiService;
     private final RabbitMqService mq;
 
     public ItemNestController(InventoryRepository repository, HistoryRepository history, LifecycleRepository lifecycle, LifeRepository life,
-                              AttachmentService attachments, AiService aiService, RabbitMqService mq) {
+                              RecipeRepository recipes, AttachmentService attachments, AiService aiService, RabbitMqService mq) {
         this.repository = repository; this.history = history; this.lifecycle = lifecycle;
-        this.life = life; this.attachments = attachments; this.aiService = aiService; this.mq = mq;
+        this.life = life; this.recipes = recipes; this.attachments = attachments; this.aiService = aiService; this.mq = mq;
     }
 
     @GetMapping("/members")
@@ -410,6 +412,42 @@ public class ItemNestController {
     public List<Map<String, Object>> checkins(@PathVariable long id, @RequestParam(defaultValue="90") int limit) {
         if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
         return life.checkins(id, limit);
+    }
+
+    @GetMapping("/recipes")
+    public List<Map<String, Object>> recipes() { return recipes.list(); }
+
+    @PostMapping("/recipes")
+    public Map<String, Object> addRecipe(@RequestBody Map<String, Object> payload) {
+        requireName(payload.get("title"), "菜谱标题不能为空");
+        return recipes.create(payload);
+    }
+
+    @PatchMapping("/recipes/{id}")
+    public Map<String, Object> patchRecipe(@PathVariable long id, @RequestBody Map<String, Object> payload) {
+        if (recipes.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "菜谱不存在");
+        if (payload.containsKey("title")) requireName(payload.get("title"), "菜谱标题不能为空");
+        return recipes.update(id, payload);
+    }
+
+    @DeleteMapping("/recipes/{id}")
+    public Map<String, Object> deleteRecipe(@PathVariable long id) {
+        if (!recipes.delete(id)) throw new ApiException(HttpStatus.NOT_FOUND, "菜谱不存在");
+        return Map.of("ok", true);
+    }
+
+    @GetMapping("/recipes/{id}/attachments")
+    public List<Map<String, Object>> recipeAttachments(@PathVariable long id) {
+        if (recipes.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "菜谱不存在");
+        return attachments.listByRecipe(id);
+    }
+
+    @PostMapping(value="/recipes/{id}/attachments", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> addRecipeAttachment(@PathVariable long id, @RequestPart("file") MultipartFile file) {
+        if (recipes.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "菜谱不存在");
+        try {
+            return attachments.saveForRecipe(id, file);
+        } catch (IOException | IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
     }
 
     @PostMapping("/chat")

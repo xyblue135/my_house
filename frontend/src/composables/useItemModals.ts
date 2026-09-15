@@ -8,8 +8,9 @@ import type { Attachment, Container, HistoryEntry, Item } from '../types'
 interface QuickRow { name: string; quantity: string }
 interface ItemForm {
   name: string; container_id: number; quantity: string;
-  lifecycle_enabled: boolean; lifecycle_type: string; start_date: string; expiry_date: string;
-  remind_days: string; lifecycle_notes: string;
+  expiry_enabled: boolean;
+  expiry_mode: 'days' | 'date';
+  start_date: string; valid_days: string; expiry_date: string;
 }
 
 /**
@@ -95,8 +96,8 @@ function createItemModalsImpl(): ItemModals {
   const pendingPreviews = ref<string[]>([])
   const itemForm = reactive<ItemForm>({
     name: '', container_id: 0, quantity: '1',
-    lifecycle_enabled: false, lifecycle_type: 'EXPIRY',
-    start_date: '', expiry_date: '', remind_days: '7', lifecycle_notes: '',
+    expiry_enabled: false, expiry_mode: 'days',
+    start_date: '', valid_days: '30', expiry_date: '',
   })
   const filteredContainers = computed<Container[]>(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
   const containerModalOpen = ref(false)
@@ -133,8 +134,8 @@ function createItemModalsImpl(): ItemModals {
     itemForm.name = ''
     itemForm.container_id = containerId ?? filteredContainers.value[0]?.id ?? store.containers[0]?.id ?? 0
     itemForm.quantity = '1'
-    itemForm.lifecycle_enabled = false; itemForm.lifecycle_type = 'EXPIRY'
-    itemForm.start_date = ''; itemForm.expiry_date = ''; itemForm.remind_days = '7'; itemForm.lifecycle_notes = ''
+    itemForm.expiry_enabled = false; itemForm.expiry_mode = 'days'
+    itemForm.start_date = ''; itemForm.valid_days = '30'; itemForm.expiry_date = ''
   }
 
   async function uploadPending(itemId: number) {
@@ -150,12 +151,11 @@ function createItemModalsImpl(): ItemModals {
     itemForm.name = item.name
     itemForm.container_id = item.container_id
     itemForm.quantity = item.quantity == null ? '' : String(item.quantity)
-    itemForm.lifecycle_enabled = Boolean(item.lifecycle_type || item.expiry_date)
-    itemForm.lifecycle_type = item.lifecycle_type || 'EXPIRY'
+    itemForm.expiry_enabled = Boolean(item.expiry_date)
+    itemForm.expiry_mode = item.lifecycle_start_date ? 'days' : 'date'
     itemForm.start_date = item.lifecycle_start_date || ''
+    itemForm.valid_days = '30'
     itemForm.expiry_date = item.expiry_date || ''
-    itemForm.remind_days = String(item.remind_days ?? 7)
-    itemForm.lifecycle_notes = item.lifecycle_notes || ''
     revokeUrls(pendingPreviews.value)
     pendingFiles.value = []
     pendingPreviews.value = []
@@ -175,12 +175,22 @@ function createItemModalsImpl(): ItemModals {
       container_id: Number(itemForm.container_id),
       quantity: itemForm.quantity === '' ? null : Number(itemForm.quantity),
     }
+    // 有效期：生产时间+天数 或 直接截止日期 → 统一算成 expiry_date
+    function computeExpiry(): string | null {
+      if (itemForm.expiry_mode === 'date') return itemForm.expiry_date || null
+      const start = itemForm.start_date
+      const days = Number(itemForm.valid_days || 0)
+      if (!start || !days || days <= 0) return null
+      const d = new Date(start + 'T00:00:00')
+      d.setDate(d.getDate() + days)
+      return d.toISOString().slice(0, 10)
+    }
     const lifecyclePayload = {
-      lifecycle_type: itemForm.lifecycle_type,
+      lifecycle_type: 'EXPIRY',
       start_date: itemForm.start_date || null,
-      expiry_date: itemForm.expiry_date || null,
-      remind_days: Number(itemForm.remind_days || 7),
-      notes: itemForm.lifecycle_notes.trim(),
+      expiry_date: computeExpiry(),
+      remind_days: 7,
+      notes: '',
     }
 
     try {
@@ -189,9 +199,9 @@ function createItemModalsImpl(): ItemModals {
         const saved = await api<Item>(`/api/items/${itemEditingId.value}`, {
           method: 'PATCH', body: JSON.stringify({ ...shared, name: names[0] }),
         })
-        if (itemForm.lifecycle_enabled) {
+        if (itemForm.expiry_enabled) {
           await api(`/api/items/${saved.id}/lifecycle`, { method: 'PUT', body: JSON.stringify(lifecyclePayload) })
-        } else if (saved.lifecycle_type || saved.expiry_date) {
+        } else if (saved.expiry_date) {
           await api(`/api/items/${saved.id}/lifecycle`, { method: 'DELETE' })
         }
         if (pendingFiles.value.length) await uploadPending(saved.id)
@@ -205,7 +215,7 @@ function createItemModalsImpl(): ItemModals {
             method: 'POST', body: JSON.stringify({ ...shared, name }),
           })
           if (!firstId) firstId = saved.id
-          if (itemForm.lifecycle_enabled) {
+          if (itemForm.expiry_enabled) {
             await api(`/api/items/${saved.id}/lifecycle`, { method: 'PUT', body: JSON.stringify(lifecyclePayload) })
           }
         }

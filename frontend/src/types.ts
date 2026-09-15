@@ -27,7 +27,12 @@ export interface LifecycleEntry {
 }
 
 export interface Attachment {
-  id: number; item_id?: number | null; container_id?: number | null; kind: 'image'|'file'; filename: string; mime_type: string; size_bytes: number; created_at: string
+  id: number; item_id?: number | null; container_id?: number | null; recipe_id?: number | null; kind: 'image'|'file'|'video'; filename: string; mime_type: string; size_bytes: number; created_at: string
+}
+
+export interface Recipe {
+  id: number; title: string; steps: string; attachment_count?: number; cover_attachment_id?: number | null;
+  created_at?: string; updated_at?: string
 }
 
 export interface HistoryEntry {
