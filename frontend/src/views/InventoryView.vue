@@ -160,7 +160,7 @@ onMounted(() => {
       <RecycleScroller
         v-if="filteredContainers.length"
         :items="filteredContainers"
-        :item-size="248"
+        :item-size="264"
         key-field="id"
         class="virtual-list containers-grid"
         v-slot="{ item }">
@@ -171,6 +171,7 @@ onMounted(() => {
             <span class="owner-badge">{{ item.owner_name }}</span>
           </div>
           <h4>{{ item.name }}</h4>
+          <div class="item-names">{{ item.item_names || '' }}</div>
           <p>{{ item.notes || '收纳位置' }}</p>
           <div class="container-bottom">
             <span>{{ item.item_count }} 类 · 约 {{ item.quantity_sum }} 件/组</span>

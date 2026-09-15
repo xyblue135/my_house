@@ -6,7 +6,8 @@ export interface Dashboard { summary: Summary; members: MemberSummary[]; lifecyc
 
 export interface Container {
   id: number; name: string; notes: string; owner_id: number; owner_name: string;
-  item_count: number; quantity_sum: number; attachment_count?: number; cover_attachment_id?: number | null; created_at?: string; updated_at?: string
+  item_count: number; quantity_sum: number; attachment_count?: number; cover_attachment_id?: number | null;
+  item_names?: string | null; created_at?: string; updated_at?: string
 }
 
 export interface Item {

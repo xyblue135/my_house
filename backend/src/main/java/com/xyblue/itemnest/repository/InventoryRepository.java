@@ -41,7 +41,8 @@ public class InventoryRepository {
             SELECT c.*, m.name AS owner_name, COUNT(i.id) AS item_count,
                    COALESCE(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE COALESCE(i.quantity, 1) END), 0) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
-                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
+                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
+                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id DESC LIMIT 4) x) AS item_names
             FROM containers c
             JOIN household_members m ON m.id = c.owner_id
             LEFT JOIN items i ON i.container_id = c.id
@@ -55,7 +56,8 @@ public class InventoryRepository {
                    (SELECT COUNT(*) FROM items i WHERE i.container_id = c.id) AS item_count,
                    (SELECT COALESCE(SUM(COALESCE(i.quantity, 1)),0) FROM items i WHERE i.container_id = c.id) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
-                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
+                   (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
+                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id DESC LIMIT 4) x) AS item_names
             FROM containers c JOIN household_members m ON m.id = c.owner_id WHERE c.id = ?
             """, id);
         return rows.isEmpty() ? null : rows.getFirst();
