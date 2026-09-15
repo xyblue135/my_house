@@ -231,6 +231,24 @@ public class ItemNestController {
         } catch (IOException | IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
     }
 
+    @GetMapping("/containers/{containerId}/attachments")
+    public List<Map<String, Object>> containerAttachments(@PathVariable long containerId) {
+        requireContainer(containerId);
+        return attachments.listByContainer(containerId);
+    }
+
+    @PostMapping(value="/containers/{containerId}/attachments", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> addContainerAttachment(@PathVariable long containerId, @RequestPart("file") MultipartFile file) {
+        Map<String, Object> container = requireContainer(containerId);
+        try {
+            Map<String, Object> saved = attachments.saveForContainer(containerId, file);
+            history.record("ADD_ATTACHMENT", "attachment", idValue(saved.get("id")), null, containerId, null,
+                idValue(container.get("owner_id")), "manual",
+                "给箱子「" + container.get("name") + "」添加照片「" + saved.get("filename") + "」", null, saved);
+            return saved;
+        } catch (IOException | IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
+    }
+
     @GetMapping("/attachments/{id}/content")
     public ResponseEntity<Resource> attachmentContent(@PathVariable long id) {
         try {

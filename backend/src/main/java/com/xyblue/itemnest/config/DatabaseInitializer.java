@@ -29,6 +29,7 @@ public class DatabaseInitializer implements ApplicationRunner {
         createBaseSchema();
         migrateHousehold();
         createV08Schema();
+        migrateContainerAttachments();
         createLifeHubSchema();
         createFtsTriggers();
 
@@ -101,6 +102,7 @@ public class DatabaseInitializer implements ApplicationRunner {
                     INSERT INTO items_fts(rowid, item_id, name, notes, tags, condition, container_name, member_name)
                     SELECT i.id, i.id, i.name, i.notes, i.tags, i.condition, c.name, m.name
                     FROM items i JOIN containers c ON c.id = i.container_id
+                    JOIN household_members m ON m.id = c.owner_id
                     WHERE c.id = NEW.id;
                 END
                 """);
@@ -115,6 +117,7 @@ public class DatabaseInitializer implements ApplicationRunner {
                     SELECT i.id, i.id, i.name, i.notes, i.tags, i.condition, c.name, m.name
                     FROM items i
                     JOIN containers c ON c.id = i.container_id
+                    JOIN household_members m ON m.id = c.owner_id
                     WHERE c.owner_id = NEW.id;
                 END
                 """);
@@ -223,14 +226,16 @@ public class DatabaseInitializer implements ApplicationRunner {
         jdbc.execute("""
             CREATE TABLE IF NOT EXISTS attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id INTEGER NOT NULL,
+                item_id INTEGER,
+                container_id INTEGER,
                 kind TEXT NOT NULL DEFAULT 'file',
                 filename TEXT NOT NULL,
                 stored_name TEXT NOT NULL UNIQUE,
                 mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
                 size_bytes INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE CASCADE
+                FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE CASCADE,
+                FOREIGN KEY(container_id) REFERENCES containers(id) ON DELETE CASCADE
             )
             """);
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attachments_item ON attachments(item_id, created_at DESC)");
@@ -305,6 +310,52 @@ public class DatabaseInitializer implements ApplicationRunner {
             )
             """);
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_checkins_entry ON life_checkins(entry_id, checkin_date DESC)");
+    }
+
+    /**
+     * 附件表支持箱子维度：旧库 attachments.item_id 是 NOT NULL 且无 container_id，
+     * 需要重建为 item_id/container_id 均可空（二者选其一）。新库由 createV08Schema 直接建好，此方法检测后跳过。
+     */
+    private void migrateContainerAttachments() {
+        if (hasColumn("attachments", "container_id")) {
+            // 新库已由 createV08Schema 建好新结构；清理可能残留的 attachments_new（上次迁移失败遗留），再确保索引存在
+            jdbc.execute("DROP TABLE IF EXISTS attachments_new");
+            jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attachments_container ON attachments(container_id, created_at DESC)");
+            return;
+        }
+        // 重建表前先移除旧 FTS trigger：ALTER TABLE RENAME 会触发 SQLite 重新解析整个 schema，
+        // 旧库里的 containers_au_fts / members_au_fts 存在 m.name 未定义的历史 bug，会导致 RENAME 报错。
+        // createFtsTriggers() 会在后续用正确 SQL 重建它们。
+        jdbc.execute("DROP TRIGGER IF EXISTS items_ai");
+        jdbc.execute("DROP TRIGGER IF EXISTS items_ad");
+        jdbc.execute("DROP TRIGGER IF EXISTS items_au");
+        jdbc.execute("DROP TRIGGER IF EXISTS containers_au_fts");
+        jdbc.execute("DROP TRIGGER IF EXISTS members_au_fts");
+        jdbc.execute("DROP TABLE IF EXISTS attachments_new");
+        jdbc.execute("""
+            CREATE TABLE attachments_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER,
+                container_id INTEGER,
+                kind TEXT NOT NULL DEFAULT 'file',
+                filename TEXT NOT NULL,
+                stored_name TEXT NOT NULL UNIQUE,
+                mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE CASCADE,
+                FOREIGN KEY(container_id) REFERENCES containers(id) ON DELETE CASCADE
+            )
+            """);
+        jdbc.update("""
+            INSERT INTO attachments_new(id,item_id,container_id,kind,filename,stored_name,mime_type,size_bytes,created_at)
+            SELECT id,item_id,NULL,kind,filename,stored_name,mime_type,size_bytes,created_at FROM attachments
+            """);
+        jdbc.execute("DROP TABLE attachments");
+        jdbc.execute("ALTER TABLE attachments_new RENAME TO attachments");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attachments_item ON attachments(item_id, created_at DESC)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_attachments_container ON attachments(container_id, created_at DESC)");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-09-15-v1-container-attachments");
     }
 
     private boolean hasColumn(String table, String column) {

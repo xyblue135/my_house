@@ -34,16 +34,28 @@ public class AttachmentService {
         return jdbc.queryForList("SELECT id,item_id,kind,filename,mime_type,size_bytes,created_at FROM attachments WHERE item_id=? ORDER BY id DESC", itemId);
     }
 
+    public List<Map<String, Object>> listByContainer(long containerId) {
+        return jdbc.queryForList("SELECT id,item_id,container_id,kind,filename,mime_type,size_bytes,created_at FROM attachments WHERE container_id=? ORDER BY id DESC", containerId);
+    }
+
     public List<Map<String, Object>> snapshot(long itemId) {
         return jdbc.queryForList("SELECT id,item_id,kind,filename,stored_name,mime_type,size_bytes,created_at FROM attachments WHERE item_id=? ORDER BY id DESC", itemId);
     }
 
     public Map<String, Object> save(long itemId, MultipartFile file) throws IOException {
+        return save(itemId, null, "item-" + itemId, file);
+    }
+
+    public Map<String, Object> saveForContainer(long containerId, MultipartFile file) throws IOException {
+        return save(null, containerId, "container-" + containerId, file);
+    }
+
+    private Map<String, Object> save(Long itemId, Long containerId, String prefix, MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("附件为空");
         if (file.getSize() > MAX_FILE_BYTES) throw new IllegalArgumentException("单个附件不能超过 20MB");
         String original = sanitizeFilename(file.getOriginalFilename());
         String ext = extension(original);
-        String stored = "item-" + itemId + "/" + UUID.randomUUID() + ext;
+        String stored = prefix + "/" + UUID.randomUUID() + ext;
         Path target = root.resolve(stored).normalize();
         if (!target.startsWith(root)) throw new IllegalArgumentException("非法附件路径");
         Files.createDirectories(target.getParent());
@@ -53,10 +65,10 @@ public class AttachmentService {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO attachments(item_id,kind,filename,stored_name,mime_type,size_bytes) VALUES (?,?,?,?,?,?)",
+                "INSERT INTO attachments(item_id,container_id,kind,filename,stored_name,mime_type,size_bytes) VALUES (?,?,?,?,?,?,?)",
                 Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, itemId); ps.setString(2, kind); ps.setString(3, original); ps.setString(4, stored);
-            ps.setString(5, mime); ps.setLong(6, file.getSize()); return ps;
+            ps.setObject(1, itemId); ps.setObject(2, containerId); ps.setString(3, kind); ps.setString(4, original);
+            ps.setString(5, stored); ps.setString(6, mime); ps.setLong(7, file.getSize()); return ps;
         }, key);
         Number id = key.getKey();
         if (id == null) throw new IllegalStateException("附件元数据写入失败");

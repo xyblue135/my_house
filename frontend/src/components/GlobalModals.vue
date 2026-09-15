@@ -69,10 +69,17 @@ function formatTime(value?: string | null) {
         </div>
         <div class="span-2 option-panel">
           <b>图片与附件（可选）</b>
-          <p class="muted">单文件 ≤20MB。附件保存在本地，不会发送给当前大语言模型。</p>
-          <input type="file" multiple @change="modals.onFiles" />
-          <div v-if="modals.pendingFiles.length" class="file-chips">
-            <span v-for="f in modals.pendingFiles" :key="f.name">{{ f.name }}</span>
+          <p class="muted">手机拍照会自动压缩到几百 KB。附件保存在本地，不会发送给大语言模型。</p>
+          <div class="upload-actions">
+            <label class="upload-btn">📷 拍照<input type="file" accept="image/*" capture="environment" @change="modals.onFiles" /></label>
+            <label class="upload-btn">🖼 选图<input type="file" accept="image/*" multiple @change="modals.onFiles" /></label>
+            <label class="upload-btn">📎 文件<input type="file" multiple @change="modals.onFiles" /></label>
+          </div>
+          <div v-if="modals.pendingPreviews.length" class="preview-grid">
+            <figure v-for="(url, i) in modals.pendingPreviews" :key="i" class="preview-item">
+              <img :src="url" alt="" />
+              <figcaption>{{ modals.pendingFiles[i]?.name }}</figcaption>
+            </figure>
           </div>
           <div v-if="modals.itemAttachments.length" class="attachment-list">
             <div v-for="a in modals.itemAttachments" :key="a.id">
@@ -102,7 +109,26 @@ function formatTime(value?: string | null) {
           </select>
         </label>
         <label>名称<input v-model="modals.containerForm.name" required /></label>
-        <label>备注<textarea v-model="modals.containerForm.notes" rows="3"></textarea></label>
+        <label>备注<textarea v-model="modals.containerForm.notes" rows="2"></textarea></label>
+        <div class="option-panel">
+          <b>箱子照片（可选）</b>
+          <p class="muted">拍一张箱子外观，方便一眼认出。手机拍照会自动压缩。</p>
+          <div class="upload-actions">
+            <label class="upload-btn">📷 拍照<input type="file" accept="image/*" capture="environment" @change="modals.onContainerFiles" /></label>
+            <label class="upload-btn">🖼 选图<input type="file" accept="image/*" multiple @change="modals.onContainerFiles" /></label>
+          </div>
+          <div v-if="modals.containerPreviews.length" class="preview-grid">
+            <figure v-for="(url, i) in modals.containerPreviews" :key="i" class="preview-item">
+              <img :src="url" alt="" />
+            </figure>
+          </div>
+          <div v-if="modals.containerAttachments.length" class="attachment-list">
+            <div v-for="a in modals.containerAttachments" :key="a.id">
+              <a :href="modals.apiUrl(`/api/attachments/${a.id}/content`)" target="_blank">🖼 {{ a.filename }}</a>
+              <button type="button" @click="modals.deleteContainerAttachment(a)">删除</button>
+            </div>
+          </div>
+        </div>
         <div class="modal-actions">
           <button v-if="modals.containerEditingId" type="button" class="outline-btn danger-outline" @click="modals.deleteContainer(onContainerSaved, onContainerDeleted)">删除空箱子</button>
           <span class="grow"></span>

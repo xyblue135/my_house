@@ -2,6 +2,7 @@ import { computed, inject, provide, reactive, ref, type InjectionKey } from 'vue
 import { api, apiUrl } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from './useToast'
+import { compressFiles, objectUrl } from '../utils/image'
 import type { Attachment, Container, HistoryEntry, Item } from '../types'
 
 interface QuickRow { name: string; quantity: string; quantity_text: string }
@@ -22,10 +23,14 @@ export interface ItemModals {
   itemEditingId: number | null
   itemAttachments: Attachment[]
   pendingFiles: File[]
+  pendingPreviews: string[]
   itemForm: ItemForm
   containerModalOpen: boolean
   containerEditingId: number | null
   containerForm: { name: string; notes: string; owner_id: number }
+  containerAttachments: Attachment[]
+  containerPendingFiles: File[]
+  containerPreviews: string[]
   quickModalOpen: boolean
   quickContainerId: number
   quickRows: QuickRow[]
@@ -44,11 +49,13 @@ export interface ItemModals {
   saveItem: (onSaved: () => Promise<void> | void) => Promise<void>
   deleteItem: (item: Item, onSaved: () => Promise<void> | void) => Promise<void>
   deleteAttachment: (a: Attachment) => Promise<void>
-  onFiles: (event: Event) => void
+  onFiles: (event: Event) => Promise<void>
   openAddContainer: () => void
-  openEditContainer: (container: Container) => void
+  openEditContainer: (container: Container) => Promise<void>
   saveContainer: (onSaved: () => Promise<void> | void) => Promise<void>
   deleteContainer: (onSaved: () => Promise<void> | void, onAfter?: () => void) => Promise<void>
+  deleteContainerAttachment: (a: Attachment) => Promise<void>
+  onContainerFiles: (event: Event) => Promise<void>
   openQuickEntry: () => void
   submitQuickEntry: (onSaved: () => Promise<void> | void) => Promise<void>
   addQuickRow: () => void
@@ -82,6 +89,7 @@ function createItemModalsImpl(): ItemModals {
   const itemEditingId = ref<number | null>(null)
   const itemAttachments = ref<Attachment[]>([])
   const pendingFiles = ref<File[]>([])
+  const pendingPreviews = ref<string[]>([])
   const itemForm = reactive<ItemForm>({
     name: '', container_id: 0, quantity: '1', quantity_text: '', condition: '正常',
     notes: '', tags: '', lifecycle_enabled: false, lifecycle_type: 'EXPIRY',
@@ -91,6 +99,9 @@ function createItemModalsImpl(): ItemModals {
   const containerModalOpen = ref(false)
   const containerEditingId = ref<number | null>(null)
   const containerForm = reactive({ name: '', notes: '', owner_id: 1 })
+  const containerAttachments = ref<Attachment[]>([])
+  const containerPendingFiles = ref<File[]>([])
+  const containerPreviews = ref<string[]>([])
   const quickModalOpen = ref(false)
   const quickContainerId = ref(0)
   const quickRows = ref<QuickRow[]>([{ name: '', quantity: '1', quantity_text: '' }, { name: '', quantity: '1', quantity_text: '' }])
@@ -104,10 +115,16 @@ function createItemModalsImpl(): ItemModals {
   const historyContainerName = ref('')
 
   // ---- 内部 actions（先声明，return 时引用） ----
+  function revokeUrls(urls: string[]) {
+    urls.forEach(u => { if (u) URL.revokeObjectURL(u) })
+  }
+
   function resetItemForm(containerId?: number) {
     itemEditingId.value = null
     itemAttachments.value = []
+    revokeUrls(pendingPreviews.value)
     pendingFiles.value = []
+    pendingPreviews.value = []
     itemForm.name = ''
     itemForm.container_id = containerId ?? filteredContainers.value[0]?.id ?? store.containers[0]?.id ?? 0
     itemForm.quantity = '1'; itemForm.quantity_text = ''; itemForm.condition = '正常'
@@ -139,7 +156,9 @@ function createItemModalsImpl(): ItemModals {
     itemForm.expiry_date = item.expiry_date || ''
     itemForm.remind_days = String(item.remind_days ?? 7)
     itemForm.lifecycle_notes = item.lifecycle_notes || ''
+    revokeUrls(pendingPreviews.value)
     pendingFiles.value = []
+    pendingPreviews.value = []
     itemAttachments.value = await api<Attachment[]>(`/api/items/${item.id}/attachments`)
     itemModalOpen.value = true
   }
@@ -205,6 +224,8 @@ function createItemModalsImpl(): ItemModals {
           toast('已添加物品')
         }
       }
+      revokeUrls(pendingPreviews.value)
+      pendingPreviews.value = []
       await onSaved()
     } catch (error) { toast((error as Error).message) }
   }
@@ -227,15 +248,43 @@ function createItemModalsImpl(): ItemModals {
     } catch (error) { toast((error as Error).message) }
   }
 
+  async function uploadContainerPending(containerId: number) {
+    for (const file of containerPendingFiles.value) {
+      const form = new FormData()
+      form.append('file', file)
+      await api(`/api/containers/${containerId}/attachments`, { method: 'POST', body: form })
+    }
+  }
+
+  async function setContainerFiles(event: Event) {
+    const files = Array.from((event.target as HTMLInputElement).files || [])
+    revokeUrls(containerPreviews.value)
+    containerPendingFiles.value = await compressFiles(files)
+    containerPreviews.value = containerPendingFiles.value.map(objectUrl)
+  }
+
   async function saveContainer(onSaved: () => Promise<void> | void) {
     try {
-      await api(
+      const saved = await api<Container>(
         containerEditingId.value ? `/api/containers/${containerEditingId.value}` : '/api/containers',
         { method: containerEditingId.value ? 'PATCH' : 'POST', body: JSON.stringify(containerForm) }
       )
+      if (containerPendingFiles.value.length) await uploadContainerPending(saved.id)
+      revokeUrls(containerPreviews.value)
+      containerPendingFiles.value = []
+      containerPreviews.value = []
       containerModalOpen.value = false
       toast(containerEditingId.value ? '箱子已更新' : '箱子已创建')
       await onSaved()
+    } catch (error) { toast((error as Error).message) }
+  }
+
+  async function deleteContainerAttachment(a: Attachment) {
+    if (!window.confirm(`删除照片"${a.filename}"？`)) return
+    try {
+      await api(`/api/attachments/${a.id}`, { method: 'DELETE' })
+      containerAttachments.value = containerAttachments.value.filter(x => x.id !== a.id)
+      toast('照片已删除')
     } catch (error) { toast((error as Error).message) }
   }
 
@@ -313,12 +362,20 @@ function createItemModalsImpl(): ItemModals {
     set itemAttachments(v) { itemAttachments.value = v },
     get pendingFiles() { return pendingFiles.value },
     set pendingFiles(v) { pendingFiles.value = v },
+    get pendingPreviews() { return pendingPreviews.value },
+    set pendingPreviews(v) { pendingPreviews.value = v },
     itemForm,
     get containerModalOpen() { return containerModalOpen.value },
     set containerModalOpen(v) { containerModalOpen.value = v },
     get containerEditingId() { return containerEditingId.value },
     set containerEditingId(v) { containerEditingId.value = v },
     containerForm,
+    get containerAttachments() { return containerAttachments.value },
+    set containerAttachments(v) { containerAttachments.value = v },
+    get containerPendingFiles() { return containerPendingFiles.value },
+    set containerPendingFiles(v) { containerPendingFiles.value = v },
+    get containerPreviews() { return containerPreviews.value },
+    set containerPreviews(v) { containerPreviews.value = v },
     get quickModalOpen() { return quickModalOpen.value },
     set quickModalOpen(v) { quickModalOpen.value = v },
     get quickContainerId() { return quickContainerId.value },
@@ -351,24 +408,37 @@ function createItemModalsImpl(): ItemModals {
     saveItem,
     deleteItem,
     deleteAttachment,
-    onFiles: (event: Event) => {
-      pendingFiles.value = Array.from((event.target as HTMLInputElement).files || [])
+    onFiles: async (event: Event) => {
+      const files = Array.from((event.target as HTMLInputElement).files || [])
+      revokeUrls(pendingPreviews.value)
+      pendingFiles.value = await compressFiles(files)
+      pendingPreviews.value = pendingFiles.value.map(objectUrl)
     },
     openAddContainer() {
       containerEditingId.value = null
       containerForm.name = ''; containerForm.notes = ''
       containerForm.owner_id = store.selectedOwnerId
+      containerAttachments.value = []
+      revokeUrls(containerPreviews.value)
+      containerPendingFiles.value = []
+      containerPreviews.value = []
       containerModalOpen.value = true
     },
-    openEditContainer(container: Container) {
+    async openEditContainer(container: Container) {
       containerEditingId.value = container.id
       containerForm.name = container.name
       containerForm.notes = container.notes || ''
       containerForm.owner_id = container.owner_id
+      revokeUrls(containerPreviews.value)
+      containerPendingFiles.value = []
+      containerPreviews.value = []
+      containerAttachments.value = await api<Attachment[]>(`/api/containers/${container.id}/attachments`)
       containerModalOpen.value = true
     },
     saveContainer,
     deleteContainer,
+    deleteContainerAttachment,
+    onContainerFiles: setContainerFiles,
     openQuickEntry() {
       quickContainerId.value = filteredContainers.value[0]?.id ?? 0
       quickRows.value = [{ name: '', quantity: '1', quantity_text: '' }, { name: '', quantity: '1', quantity_text: '' }]
