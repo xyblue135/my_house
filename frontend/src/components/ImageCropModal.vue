@@ -65,7 +65,12 @@ async function rotate(dir: 1 | -1) {
   ctx.translate(canvas.width / 2, canvas.height / 2)
   ctx.rotate((dir * Math.PI) / 2)
   ctx.drawImage(imgEl, -imgEl.naturalWidth / 2, -imgEl.naturalHeight / 2)
-  await applyImage(canvas.toDataURL('image/jpeg', 0.95))
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+  // 关键：旋转后必须同步更新 imgUrl，否则 <img> 仍显示旧图，
+  // 却被 applyImage 套上新尺寸（宽高已交换），旧图被拉伸变形。
+  if (imgUrl.value) URL.revokeObjectURL(imgUrl.value)
+  imgUrl.value = dataUrl
+  await applyImage(dataUrl)
 }
 
 function onPointerDown(e: PointerEvent, mode: string) {

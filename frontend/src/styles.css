@@ -85,3 +85,11 @@ body.preview-open{overflow:hidden}
 .preview-nav:active{background:rgba(255,255,255,.32)}
 .preview-counter{position:fixed;top:18px;left:50%;transform:translateX(-50%);color:#fff;font-size:13px;z-index:301;background:rgba(255,255,255,.14);padding:5px 12px;border-radius:999px;font-variant-numeric:tabular-nums}
 @media (max-width:640px){.preview-nav{display:none}}
+
+/* ===== 卡片固定高度 + 单行截断（对齐虚拟滚动 item-size，防止内容溢出盒子） ===== */
+.container-card{height:248px;overflow:hidden}
+.container-card h4{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-card{height:168px;overflow:hidden}
+.item-card h4{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-notes{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-meta{flex-wrap:nowrap;overflow:hidden}

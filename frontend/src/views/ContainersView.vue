@@ -38,7 +38,7 @@ function onItemSaved() { return refreshData() }
     <RecycleScroller
       v-if="filteredContainers.length"
       :items="filteredContainers"
-      :item-size="240"
+      :item-size="248"
       key-field="id"
       class="virtual-list containers-grid"
       v-slot="{ item }">
