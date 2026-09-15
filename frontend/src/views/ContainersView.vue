@@ -4,11 +4,18 @@ import { RecycleScroller } from 'vue-virtual-scroller'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
+import { useImagePreview } from '../composables/useImagePreview'
 import { attachmentUrl } from '../api'
 
 const store = useAppStore()
 const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
+const preview = useImagePreview()
+
+function openCoverPreview(id: number | null | undefined) {
+  if (!id) return
+  preview.open([attachmentUrl(id)])
+}
 
 const filteredContainers = computed(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
 const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
@@ -37,7 +44,7 @@ function onItemSaved() { return refreshData() }
       v-slot="{ item }">
       <article class="container-card" @click="modals.openHistory(item)">
         <div class="container-cover">
-          <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+          <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
           <div v-else class="container-cover-empty">▦</div>
           <span class="owner-badge">{{ item.owner_name }}</span>
         </div>

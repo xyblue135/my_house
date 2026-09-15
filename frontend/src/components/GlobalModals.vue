@@ -3,12 +3,22 @@ import { computed } from 'vue'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useAppStore } from '../store'
+import { useImagePreview } from '../composables/useImagePreview'
 import { attachmentUrl } from '../api'
+import type { Attachment } from '../types'
 import ImageCropModal from './ImageCropModal.vue'
 
 const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
 const store = useAppStore()
+const preview = useImagePreview()
+
+function previewAttachments(attachments: Attachment[], currentId: number) {
+  const images = attachments.filter(a => a.kind === 'image')
+  const urls = images.map(a => attachmentUrl(a.id))
+  const startIndex = images.findIndex(a => a.id === currentId)
+  preview.open(urls, Math.max(0, startIndex))
+}
 
 function onItemSaved() { return refreshData() }
 function onContainerSaved() { return refreshData() }
@@ -85,7 +95,7 @@ function formatTime(value?: string | null) {
           </div>
           <div v-if="modals.itemAttachments.length" class="attachment-list">
             <div v-for="a in modals.itemAttachments" :key="a.id" class="attachment-row">
-              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" />
+              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" @click.stop="previewAttachments(modals.itemAttachments, a.id)" />
               <span v-else class="attachment-file">📎</span>
               <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteAttachment(a)">删除</button>
@@ -128,7 +138,7 @@ function formatTime(value?: string | null) {
           </div>
           <div v-if="modals.containerAttachments.length" class="attachment-list">
             <div v-for="a in modals.containerAttachments" :key="a.id" class="attachment-row">
-              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" />
+              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" @click.stop="previewAttachments(modals.containerAttachments, a.id)" />
               <span v-else class="attachment-file">📎</span>
               <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteContainerAttachment(a)">删除</button>

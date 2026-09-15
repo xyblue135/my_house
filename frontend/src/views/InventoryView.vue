@@ -7,6 +7,7 @@ import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
+import { useImagePreview } from '../composables/useImagePreview'
 import type { HistoryEntry, Item } from '../types'
 
 const store = useAppStore()
@@ -14,6 +15,12 @@ const router = useRouter()
 const { toast } = useToast()
 const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
+const preview = useImagePreview()
+
+function openCoverPreview(id: number | null | undefined) {
+  if (!id) return
+  preview.open([attachmentUrl(id)])
+}
 
 const search = ref('')
 const searchResults = ref<Item[]>([])
@@ -120,7 +127,7 @@ onMounted(() => {
         <article class="item-card">
           <div class="item-top">
             <div class="item-icon thumb">
-              <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+              <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
               <template v-else>{{ firstChar(item.name) }}</template>
             </div>
             <div class="item-actions">
@@ -159,7 +166,7 @@ onMounted(() => {
         v-slot="{ item }">
         <article class="container-card" @click="openContainerDetail(item.id)">
           <div class="container-cover">
-            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
             <div v-else class="container-cover-empty">▦</div>
             <span class="owner-badge">{{ item.owner_name }}</span>
           </div>
@@ -209,7 +216,7 @@ onMounted(() => {
       <div class="container-detail-head">
         <div class="container-detail-title-wrap">
           <div class="container-detail-cover">
-            <img v-if="openContainer.cover_attachment_id" :src="attachmentUrl(openContainer.cover_attachment_id)" alt="" />
+            <img v-if="openContainer.cover_attachment_id" :src="attachmentUrl(openContainer.cover_attachment_id)" alt="" @click.stop="openCoverPreview(openContainer.cover_attachment_id)" />
             <div v-else class="box-mark large">▦</div>
           </div>
           <div>
@@ -231,7 +238,7 @@ onMounted(() => {
       <div v-if="openContainerItems.length" class="container-detail-items">
         <article v-for="item in openContainerItems" :key="item.id" class="container-item-row">
           <div class="container-item-icon thumb">
-            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" />
+            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
             <template v-else>{{ firstChar(item.name) }}</template>
           </div>
           <div class="container-item-main">

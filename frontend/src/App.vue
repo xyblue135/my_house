@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppShell from './components/AppShell.vue'
 import GlobalModals from './components/GlobalModals.vue'
+import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import OwnerTabs from './components/OwnerTabs.vue'
 import { useAppStore } from './store'
 import { useAppBootstrap } from './composables/useAppBootstrap'
@@ -80,6 +81,7 @@ watch(() => route.value, () => { showCreateMenu.value = false })
     </main>
 
     <GlobalModals />
+    <ImagePreviewModal />
 
     <div class="toast" :class="{ show: toastText }">{{ toastText }}</div>
   </div>
