@@ -1,4 +1,4 @@
-import { inject, provide, reactive, type InjectionKey } from 'vue'
+import { inject, reactive, type App, type InjectionKey } from 'vue'
 import type { Container, Dashboard, Item, LifecycleEntry, Member, MqStatus, AiSettings } from './types'
 
 /**
@@ -33,8 +33,8 @@ export function createAppStore(): AppStore {
   }) as AppStore
 }
 
-export function provideAppStore(store: AppStore): void {
-  provide(KEY, store)
+export function provideAppStore(app: App, store: AppStore): void {
+  app.provide(KEY, store)
 }
 
 export function useAppStore(): AppStore {

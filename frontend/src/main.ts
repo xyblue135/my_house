@@ -7,5 +7,5 @@ import './styles.css'
 
 const app = createApp(App)
 app.use(router)
-provideAppStore(createAppStore())
+provideAppStore(app, createAppStore())
 app.mount('#app')
