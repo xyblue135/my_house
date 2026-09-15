@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
@@ -7,7 +7,7 @@ import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
-import type { Container } from '../types'
+import type { Container, Item } from '../types'
 
 const store = useAppStore()
 const modals = useItemModals()
@@ -24,8 +24,54 @@ const openContainerId = ref<number | null>(null)
 function openContainerDetail(id: number) { openContainerId.value = id }
 function closeContainerDetail() { openContainerId.value = null }
 
-const filteredContainers = computed(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
+// 分组筛选：null = 默认分组（未分组），number = 具体分组
+const activeGroupId = ref<number | null>(null)
+const myGroups = computed(() => store.groups.filter(g => g.owner_id === store.selectedOwnerId))
+const filteredContainers = computed(() => store.containers.filter(c => {
+  if (c.owner_id !== store.selectedOwnerId) return false
+  return activeGroupId.value === null ? (c.group_id == null) : c.group_id === activeGroupId.value
+}))
 const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
+// 切换成员时回到默认分组视图
+watch(() => store.selectedOwnerId, () => { activeGroupId.value = null })
+
+function setGroup(id: number | null) { activeGroupId.value = id }
+async function addGroup() {
+  const name = window.prompt('新分组名称（如：房间A）')
+  if (!name || !name.trim()) return
+  try {
+    await api('/api/groups', { method: 'POST', body: JSON.stringify({ owner_id: store.selectedOwnerId, name: name.trim() }) })
+    await refreshData()
+    toast('分组已新建')
+  } catch (error) { toast((error as Error).message) }
+}
+async function deleteGroup(groupId: number) {
+  const g = myGroups.value.find(x => x.id === groupId)
+  if (!g || !window.confirm(`删除分组「${g.name}」？其下盒子会回到默认分组。`)) return
+  try {
+    await api(`/api/groups/${groupId}`, { method: 'DELETE' })
+    if (activeGroupId.value === groupId) activeGroupId.value = null
+    await refreshData()
+    toast('分组已删除')
+  } catch (error) { toast((error as Error).message) }
+}
+function openAddContainer() {
+  modals.openAddContainer(activeGroupId.value)
+}
+
+// 按箱子聚合物品，正序，供卡片渲染可点击的小框
+const itemsByContainer = computed(() => {
+  const map = new Map<number, Item[]>()
+  for (const it of store.items) {
+    const arr = map.get(it.container_id) ?? []
+    arr.push(it)
+    map.set(it.container_id, arr)
+  }
+  for (const arr of map.values()) arr.sort((a, b) => a.id - b.id)
+  return map
+})
+function itemsInContainer(containerId: number): Item[] { return itemsByContainer.value.get(containerId) ?? [] }
+function onItemEdit(item: Item) { modals.openEditItem(item) }
 
 // 编辑排序模式：进入后卡片显示上移/下移，点保存调 reorder API
 const editingSort = ref(false)
@@ -88,7 +134,7 @@ async function saveSort() {
     <div class="section-head row-mobile">
       <div>
         <h3>{{ selectedMember?.name }}的箱子管理</h3>
-        <p>当前不加入房间层级，箱子直接归属家庭成员。</p>
+        <p>用分组（如房间A / 房间B）区分盒子的位置，默认显示「默认」分组。</p>
       </div>
       <div class="inline-actions">
         <template v-if="editingSort">
@@ -98,9 +144,17 @@ async function saveSort() {
         <template v-else>
           <button class="outline-btn" @click="enterSortMode">编辑排序</button>
           <button class="outline-btn" @click="modals.openBatch">批量操作</button>
-          <button class="primary-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
+          <button class="primary-btn" @click="openAddContainer">＋ 新建箱子</button>
         </template>
       </div>
+    </div>
+    <div class="group-tabs">
+      <button class="group-tab" :class="{ active: activeGroupId === null }" @click="setGroup(null)">默认</button>
+      <button v-for="g in myGroups" :key="g.id" class="group-tab" :class="{ active: activeGroupId === g.id }" @click="setGroup(g.id)">
+        {{ g.name }}
+        <span class="group-del" title="删除分组" @click.stop="deleteGroup(g.id)">×</span>
+      </button>
+      <button class="group-add" @click="addGroup">＋ 分组</button>
     </div>
     <div v-if="displayContainers.length" class="containers-grid">
       <article
@@ -124,7 +178,10 @@ async function saveSort() {
           <span class="owner-badge">{{ item.owner_name }}</span>
         </div>
         <h4>{{ item.name }}</h4>
-        <div class="item-names">{{ item.item_names || '' }}</div>
+        <div class="item-chips">
+          <button v-for="it in itemsInContainer(item.id)" :key="it.id" class="item-chip" @click.stop="onItemEdit(it)">{{ it.name }}</button>
+          <span v-if="!itemsInContainer(item.id).length" class="muted">暂无物品</span>
+        </div>
         <p>{{ item.notes || '空备注' }}</p>
         <div class="container-bottom">
           <button class="open-btn" @click.stop="openContainerDetail(item.id)">打开</button>
@@ -134,7 +191,7 @@ async function saveSort() {
     <div v-else class="empty">
       <h3>{{ selectedMember?.name }}还没有箱子</h3>
       <p>在物品总览或这里直接创建第一个箱子。</p>
-      <button class="primary-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
+      <button class="primary-btn" @click="openAddContainer">＋ 新建箱子</button>
     </div>
   </div>
 

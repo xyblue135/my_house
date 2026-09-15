@@ -43,6 +43,64 @@ public class ItemNestController {
     @GetMapping("/members")
     public List<Map<String, Object>> members() { return repository.listMembers(); }
 
+    @PostMapping("/members")
+    public Map<String, Object> addMember(@RequestBody Map<String, Object> payload) {
+        String name = String.valueOf(payload.getOrDefault("name", "")).trim();
+        try {
+            return repository.createMember(name);
+        } catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
+        catch (DataIntegrityViolationException ex) { throw new ApiException(HttpStatus.CONFLICT, "用户名称已存在"); }
+    }
+
+    @PatchMapping("/members/{id}")
+    public Map<String, Object> patchMember(@PathVariable long id, @RequestBody Map<String, Object> payload) {
+        requireMember(id);
+        String name = String.valueOf(payload.getOrDefault("name", "")).trim();
+        try {
+            return repository.updateMember(id, name);
+        } catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
+        catch (DataIntegrityViolationException ex) { throw new ApiException(HttpStatus.CONFLICT, "用户名称已存在"); }
+    }
+
+    @DeleteMapping("/members/{id}")
+    public Map<String, Object> deleteMember(@PathVariable long id) {
+        requireMember(id);
+        if (repository.listMembers().size() <= 1) throw new ApiException(HttpStatus.BAD_REQUEST, "至少保留一个用户");
+        repository.deleteMember(id);
+        return Map.of("ok", true);
+    }
+
+    @GetMapping("/groups")
+    public List<Map<String, Object>> groups(@RequestParam(name="owner_id", required=false) Long ownerId) {
+        return repository.listGroups(ownerId);
+    }
+
+    @PostMapping("/groups")
+    public Map<String, Object> addGroup(@RequestBody Map<String, Object> payload) {
+        long ownerId = payload.get("owner_id") == null ? 1 : requireId(payload.get("owner_id"), "家庭成员不存在");
+        requireMember(ownerId);
+        String name = String.valueOf(payload.getOrDefault("name", "")).trim();
+        try {
+            return repository.createGroup(ownerId, name);
+        } catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
+    }
+
+    @PatchMapping("/groups/{id}")
+    public Map<String, Object> patchGroup(@PathVariable long id, @RequestBody Map<String, Object> payload) {
+        if (repository.getGroup(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "分组不存在");
+        String name = String.valueOf(payload.getOrDefault("name", "")).trim();
+        try {
+            return repository.updateGroup(id, name);
+        } catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
+    }
+
+    @DeleteMapping("/groups/{id}")
+    public Map<String, Object> deleteGroup(@PathVariable long id) {
+        if (repository.getGroup(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "分组不存在");
+        repository.deleteGroup(id);
+        return Map.of("ok", true);
+    }
+
     @GetMapping("/summary")
     public Map<String, Object> summary(@RequestParam(name="owner_id", required=false) List<Long> ownerIds) {
         return repository.summary(ownerIds == null ? List.of() : ownerIds);
@@ -68,6 +126,7 @@ public class ItemNestController {
         requireName(payload.get("name"), "箱子名称不能为空");
         long ownerId = payload.get("owner_id") == null ? 1 : requireId(payload.get("owner_id"), "家庭成员不存在");
         requireMember(ownerId); payload.put("owner_id", ownerId);
+        validateGroup(payload.get("group_id"));
         try {
             Map<String, Object> container = repository.createContainer(payload);
             history.record("ADD_CONTAINER", "container", id(container), null, id(container), null, ownerId, "manual",
@@ -91,6 +150,7 @@ public class ItemNestController {
     public Map<String, Object> patchContainer(@PathVariable long id, @RequestBody Map<String, Object> payload) {
         Map<String, Object> before = requireContainer(id);
         if (payload.containsKey("owner_id")) requireMember(requireId(payload.get("owner_id"), "家庭成员不存在"));
+        if (payload.containsKey("group_id")) validateGroup(payload.get("group_id"));
         try {
             Map<String, Object> after = repository.updateContainer(id, payload);
             history.record("UPDATE_CONTAINER", "container", id, null, id, null, longValue(after.get("owner_id")), "manual",
@@ -381,6 +441,11 @@ public class ItemNestController {
     private Map<String, Object> requireContainer(long id) { Map<String,Object> value=repository.getContainer(id); if(value==null) throw new ApiException(HttpStatus.NOT_FOUND,"箱子不存在"); return value; }
     private Map<String, Object> requireItem(long id) { Map<String,Object> value=repository.getItem(id); if(value==null) throw new ApiException(HttpStatus.NOT_FOUND,"物品不存在"); return value; }
     private void requireMember(long id) { if(repository.getMember(id)==null) throw new ApiException(HttpStatus.BAD_REQUEST,"家庭成员不存在"); }
+    private void validateGroup(Object groupId) {
+        if (groupId == null || "0".equals(String.valueOf(groupId)) || String.valueOf(groupId).isBlank()) return;
+        long gid = requireId(groupId, "分组不存在");
+        if (repository.getGroup(gid) == null) throw new ApiException(HttpStatus.BAD_REQUEST, "分组不存在");
+    }
     private static void requireName(Object value,String message){ if(value==null||String.valueOf(value).trim().isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST,message); }
     private static long requireId(Object value,String message){ try{return longValue(value);}catch(Exception ex){throw new ApiException(HttpStatus.BAD_REQUEST,message);} }
     private static long id(Map<String,Object> map){return longValue(map.get("id"));}

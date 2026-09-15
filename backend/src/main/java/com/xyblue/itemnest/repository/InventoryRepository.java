@@ -20,7 +20,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class InventoryRepository {
     private static final Set<String> ITEM_FIELDS = Set.of("container_id", "name", "quantity", "quantity_text", "condition", "notes", "tags");
-    private static final Set<String> CONTAINER_FIELDS = Set.of("name", "notes", "owner_id");
+    private static final Set<String> CONTAINER_FIELDS = Set.of("name", "notes", "owner_id", "group_id");
     private final JdbcTemplate jdbc;
 
     public InventoryRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -34,17 +34,91 @@ public class InventoryRepository {
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
+    public Map<String, Object> createMember(String name) {
+        final String trimmed = name.trim();
+        if (trimmed.isEmpty()) throw new IllegalArgumentException("用户名称不能为空");
+        KeyHolder key = new GeneratedKeyHolder();
+        jdbc.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO household_members(name, sort_order) VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM household_members))",
+                Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, trimmed);
+            return ps;
+        }, key);
+        return getMember(key.getKey().longValue());
+    }
+
+    public Map<String, Object> updateMember(long id, String name) {
+        name = name.trim();
+        if (name.isEmpty()) throw new IllegalArgumentException("用户名称不能为空");
+        jdbc.update("UPDATE household_members SET name = ? WHERE id = ?", name, id);
+        return getMember(id);
+    }
+
+    /**
+     * 删除成员并级联清理其名下所有数据（物品、箱子、生活记录、操作历史）。
+     * 物品/箱子的附件、物品生命周期由外键 ON DELETE CASCADE 自动清理，FTS 由 trigger 维护。
+     */
+    public void deleteMember(long id) {
+        jdbc.update("DELETE FROM items WHERE container_id IN (SELECT id FROM containers WHERE owner_id = ?)", id);
+        jdbc.update("DELETE FROM containers WHERE owner_id = ?", id);
+        jdbc.update("DELETE FROM life_entries WHERE owner_id = ?", id);
+        jdbc.update("DELETE FROM operation_history WHERE owner_id = ?", id);
+        jdbc.update("DELETE FROM household_members WHERE id = ?", id);
+    }
+
+    public List<Map<String, Object>> listGroups(Long ownerId) {
+        if (ownerId == null) {
+            return jdbc.queryForList("SELECT * FROM container_groups ORDER BY owner_id, sort_order, id");
+        }
+        return jdbc.queryForList("SELECT * FROM container_groups WHERE owner_id = ? ORDER BY sort_order, id", ownerId);
+    }
+
+    public Map<String, Object> getGroup(long id) {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM container_groups WHERE id = ?", id);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    public Map<String, Object> createGroup(long ownerId, String name) {
+        final String trimmed = name.trim();
+        if (trimmed.isEmpty()) throw new IllegalArgumentException("分组名称不能为空");
+        KeyHolder key = new GeneratedKeyHolder();
+        jdbc.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO container_groups(owner_id, name, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM container_groups WHERE owner_id = ?))",
+                Statement.RETURN_GENERATED_KEYS);
+            ps.setLong(1, ownerId);
+            ps.setString(2, trimmed);
+            ps.setLong(3, ownerId);
+            return ps;
+        }, key);
+        return getGroup(key.getKey().longValue());
+    }
+
+    public Map<String, Object> updateGroup(long id, String name) {
+        name = name.trim();
+        if (name.isEmpty()) throw new IllegalArgumentException("分组名称不能为空");
+        jdbc.update("UPDATE container_groups SET name = ? WHERE id = ?", name, id);
+        return getGroup(id);
+    }
+
+    public void deleteGroup(long id) {
+        jdbc.update("UPDATE containers SET group_id = NULL WHERE group_id = ?", id);
+        jdbc.update("DELETE FROM container_groups WHERE id = ?", id);
+    }
+
     public List<Map<String, Object>> listContainers() { return listContainers(null); }
 
     public List<Map<String, Object>> listContainers(Long ownerId) {
         String sql = """
-            SELECT c.*, m.name AS owner_name, COUNT(i.id) AS item_count,
+            SELECT c.*, m.name AS owner_name, g.name AS group_name, COUNT(i.id) AS item_count,
                    COALESCE(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE COALESCE(i.quantity, 1) END), 0) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
                    (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id ASC) x) AS item_names
             FROM containers c
             JOIN household_members m ON m.id = c.owner_id
+            LEFT JOIN container_groups g ON g.id = c.group_id
             LEFT JOIN items i ON i.container_id = c.id
             """ + (ownerId == null ? "" : " WHERE c.owner_id = ?") + " GROUP BY c.id ORDER BY c.owner_id, c.sort_order, c.id";
         return ownerId == null ? jdbc.queryForList(sql) : jdbc.queryForList(sql, ownerId);
@@ -52,13 +126,16 @@ public class InventoryRepository {
 
     public Map<String, Object> getContainer(long id) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-            SELECT c.*, m.name AS owner_name,
+            SELECT c.*, m.name AS owner_name, g.name AS group_name,
                    (SELECT COUNT(*) FROM items i WHERE i.container_id = c.id) AS item_count,
                    (SELECT COALESCE(SUM(COALESCE(i.quantity, 1)),0) FROM items i WHERE i.container_id = c.id) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
                    (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id ASC) x) AS item_names
-            FROM containers c JOIN household_members m ON m.id = c.owner_id WHERE c.id = ?
+            FROM containers c
+            JOIN household_members m ON m.id = c.owner_id
+            LEFT JOIN container_groups g ON g.id = c.group_id
+            WHERE c.id = ?
             """, id);
         return rows.isEmpty() ? null : rows.getFirst();
     }
@@ -67,19 +144,29 @@ public class InventoryRepository {
         String name = string(data.get("name")).trim();
         String notes = string(data.get("notes")).trim();
         long ownerId = data.get("owner_id") == null ? 1L : number(data.get("owner_id")).longValue();
+        Long groupId = normalizeGroupId(data.get("group_id"));
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO containers(name, notes, owner_id, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM containers WHERE owner_id = ?))", Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, name); ps.setString(2, notes); ps.setLong(3, ownerId); ps.setLong(4, ownerId); return ps;
+                "INSERT INTO containers(name, notes, owner_id, group_id, sort_order) VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM containers WHERE owner_id = ?))", Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, name); ps.setString(2, notes); ps.setLong(3, ownerId);
+            if (groupId == null) ps.setObject(4, null); else ps.setLong(4, groupId);
+            ps.setLong(5, ownerId); return ps;
         }, key);
         return getContainer(key.getKey().longValue());
     }
 
     public Map<String, Object> updateContainer(long id, Map<String, Object> data) {
+        if (data.containsKey("group_id")) data.put("group_id", normalizeGroupId(data.get("group_id")));
         updateDynamic("containers", id, data, CONTAINER_FIELDS);
         refreshFtsForContainer(id);
         return getContainer(id);
+    }
+
+    /** group_id 规范化：空值 / 0 / 空串 → null（默认分组）。 */
+    private static Long normalizeGroupId(Object value) {
+        if (value == null || String.valueOf(value).isBlank() || "0".equals(String.valueOf(value))) return null;
+        return number(value).longValue();
     }
 
     public void reorderContainers(long ownerId, List<Long> ids) {

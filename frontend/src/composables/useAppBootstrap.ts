@@ -2,7 +2,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, AbortScope } from '../api'
 import { useAppStore } from '../store'
-import type { AiSettings, Container, Dashboard, Item, LifecycleEntry, Member, MqStatus, Summary } from '../types'
+import type { AiSettings, Container, ContainerGroup, Dashboard, Item, LifecycleEntry, Member, MqStatus, Summary } from '../types'
 import { useToast } from './useToast'
 
 const summary = ref<Summary>({ containers: 0, items: 0, quantity: 0, special: 0 })
@@ -22,16 +22,18 @@ export function useAppBootstrap() {
   const scope = new AbortScope()
 
   async function loadAll() {
-    const [ms, ds, cs, xs, ls, settings, mq] = await Promise.all([
+    const [ms, ds, cs, gs, xs, ls, settings, mq] = await Promise.all([
       api<Member[]>('/api/members', { signal: scope.signal }),
       api<Dashboard>('/api/dashboard', { signal: scope.signal }),
       api<Container[]>('/api/containers', { signal: scope.signal }),
+      api<ContainerGroup[]>('/api/groups', { signal: scope.signal }),
       api<Item[]>('/api/items', { signal: scope.signal }),
       api<LifecycleEntry[]>('/api/lifecycle', { signal: scope.signal }),
       api<AiSettings>('/api/settings', { signal: scope.signal }),
       api<MqStatus>('/api/mq/status', { signal: scope.signal }),
     ])
     store.members = ms
+    store.groups = gs
     store.dashboard = ds
     Object.assign(summary.value, ds.summary)
     store.containers = cs
@@ -45,17 +47,24 @@ export function useAppBootstrap() {
   }
 
   async function refreshData() {
-    const [ds, cs, xs, ls] = await Promise.all([
+    const [ms, ds, cs, gs, xs, ls] = await Promise.all([
+      api<Member[]>('/api/members', { signal: scope.signal }),
       api<Dashboard>('/api/dashboard', { signal: scope.signal }),
       api<Container[]>('/api/containers', { signal: scope.signal }),
+      api<ContainerGroup[]>('/api/groups', { signal: scope.signal }),
       api<Item[]>('/api/items', { signal: scope.signal }),
       api<LifecycleEntry[]>('/api/lifecycle', { signal: scope.signal }),
     ])
+    store.members = ms
+    store.groups = gs
     store.dashboard = ds
     Object.assign(summary.value, ds.summary)
     store.containers = cs
     store.items = xs
     store.lifecycles = ls
+    if (!store.members.some(m => m.id === store.selectedOwnerId)) {
+      store.setOwner(store.members[0]?.id ?? 1)
+    }
   }
 
   function onKeydown(event: KeyboardEvent) {

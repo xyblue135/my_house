@@ -28,6 +28,8 @@ public class DatabaseInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         createBaseSchema();
         migrateHousehold();
+        migrateGroups();
+        renameDefaultMembers();
         createV08Schema();
         migrateContainerAttachments();
         createLifeHubSchema();
@@ -186,6 +188,39 @@ public class DatabaseInitializer implements ApplicationRunner {
             jdbc.update("UPDATE containers SET sort_order = id");
         }
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_owner ON containers(owner_id, id)");
+    }
+
+    /**
+     * 盒子分组：每个成员可自定义分组（如「房间A / 房间B」），
+     * 未分组（group_id 为 NULL）视为「默认分组」。观看时按分组筛选显示。
+     */
+    private void migrateGroups() {
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS container_groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """);
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_groups_owner ON container_groups(owner_id, sort_order, id)");
+        if (!hasColumn("containers", "group_id")) {
+            jdbc.execute("ALTER TABLE containers ADD COLUMN group_id INTEGER");
+        }
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_group ON containers(group_id, id)");
+    }
+
+    /**
+     * 把默认成员「我 / 爸 / 妈」一次性改名为「用户1 / 用户2 / 用户3」。
+     * 用 `AND name = 旧名` 保护：用户已手动改名则不再覆盖。
+     */
+    private void renameDefaultMembers() {
+        if (isMigrationApplied("2026-09-16-v1-rename-default-members")) return;
+        jdbc.update("UPDATE household_members SET name = '用户1' WHERE id = 1 AND name = '我'");
+        jdbc.update("UPDATE household_members SET name = '用户2' WHERE id = 2 AND name = '爸'");
+        jdbc.update("UPDATE household_members SET name = '用户3' WHERE id = 3 AND name = '妈'");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-09-16-v1-rename-default-members");
     }
 
     private void createV08Schema() {

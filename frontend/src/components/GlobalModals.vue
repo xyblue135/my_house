@@ -28,6 +28,8 @@ function onBatchSaved() { return refreshData() }
 function onHistorySaved() { return refreshData() }
 
 const filteredItems = computed(() => store.items.filter(i => i.owner_id === store.selectedOwnerId))
+// 箱子表单里「分组」下拉：跟随当前选择的归属成员
+const currentGroups = computed(() => store.groups.filter(g => g.owner_id === modals.containerForm.owner_id))
 
 function formatTime(value?: string | null) {
   if (!value) return ''
@@ -54,10 +56,6 @@ function formatTime(value?: string | null) {
           </select>
         </label>
         <label>数量<input v-model="modals.itemForm.quantity" type="number" min="0" /></label>
-        <label>数量描述<input v-model="modals.itemForm.quantity_text" placeholder="一些 / 一盒" /></label>
-        <label>状态<input v-model="modals.itemForm.condition" /></label>
-        <label class="span-2">标签<input v-model="modals.itemForm.tags" /></label>
-        <label class="span-2">备注<textarea v-model="modals.itemForm.notes" rows="2"></textarea></label>
         <div class="span-2 option-panel">
           <label class="switch-line">
             <input v-model="modals.itemForm.lifecycle_enabled" type="checkbox" />
@@ -122,6 +120,12 @@ function formatTime(value?: string | null) {
             <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
         </label>
+        <label>分组
+          <select v-model="modals.containerForm.group_id">
+            <option :value="null">默认分组</option>
+            <option v-for="g in currentGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+          </select>
+        </label>
         <label>名称<input v-model="modals.containerForm.name" required /></label>
         <label>备注<textarea v-model="modals.containerForm.notes" rows="2"></textarea></label>
         <div class="option-panel">
@@ -170,11 +174,10 @@ function formatTime(value?: string | null) {
           </label>
         </div>
         <div class="quick-table">
-          <div class="quick-row head"><span>名称</span><span>数量</span><span>数量描述</span><span></span></div>
+          <div class="quick-row head"><span>名称</span><span>数量</span><span></span></div>
           <div v-for="(r, index) in modals.quickRows" :key="index" class="quick-row">
             <input v-model="r.name" placeholder="物品名称" />
             <input v-model="r.quantity" type="number" min="0" />
-            <input v-model="r.quantity_text" placeholder="一盒 / 一些" />
             <button type="button" class="icon-btn" @click="modals.removeQuickRow(index)">×</button>
           </div>
         </div>
@@ -206,8 +209,6 @@ function formatTime(value?: string | null) {
             <option v-for="c in modals.filteredContainers" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
         </label>
-        <label>状态<input v-model="modals.batchCondition" placeholder="留空不修改" /></label>
-        <label>标签<input v-model="modals.batchTags" placeholder="留空不修改" /></label>
       </div>
       <div class="modal-actions">
         <span class="muted">已选择 {{ modals.batchSelected.length }} 类</span>

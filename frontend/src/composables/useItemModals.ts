@@ -5,10 +5,9 @@ import { useToast } from './useToast'
 import { compressFiles, compressImage, objectUrl } from '../utils/image'
 import type { Attachment, Container, HistoryEntry, Item } from '../types'
 
-interface QuickRow { name: string; quantity: string; quantity_text: string }
+interface QuickRow { name: string; quantity: string }
 interface ItemForm {
-  name: string; container_id: number; quantity: string; quantity_text: string; condition: string;
-  notes: string; tags: string;
+  name: string; container_id: number; quantity: string;
   lifecycle_enabled: boolean; lifecycle_type: string; start_date: string; expiry_date: string;
   remind_days: string; lifecycle_notes: string;
 }
@@ -27,7 +26,7 @@ export interface ItemModals {
   itemForm: ItemForm
   containerModalOpen: boolean
   containerEditingId: number | null
-  containerForm: { name: string; notes: string; owner_id: number }
+  containerForm: { name: string; notes: string; owner_id: number; group_id: number | null }
   containerAttachments: Attachment[]
   containerPendingFiles: File[]
   containerPreviews: string[]
@@ -37,8 +36,6 @@ export interface ItemModals {
   batchModalOpen: boolean
   batchSelected: number[]
   batchTargetContainerId: number
-  batchCondition: string
-  batchTags: string
   historyModalOpen: boolean
   containerHistory: HistoryEntry[]
   historyContainerName: string
@@ -50,7 +47,7 @@ export interface ItemModals {
   deleteItem: (item: Item, onSaved: () => Promise<void> | void) => Promise<void>
   deleteAttachment: (a: Attachment) => Promise<void>
   onFiles: (event: Event) => Promise<void>
-  openAddContainer: () => void
+  openAddContainer: (groupId?: number | null) => void
   openEditContainer: (container: Container) => Promise<void>
   saveContainer: (onSaved: () => Promise<void> | void) => Promise<void>
   deleteContainer: (onSaved: () => Promise<void> | void, onAfter?: () => void) => Promise<void>
@@ -97,25 +94,23 @@ function createItemModalsImpl(): ItemModals {
   const pendingFiles = ref<File[]>([])
   const pendingPreviews = ref<string[]>([])
   const itemForm = reactive<ItemForm>({
-    name: '', container_id: 0, quantity: '1', quantity_text: '', condition: '正常',
-    notes: '', tags: '', lifecycle_enabled: false, lifecycle_type: 'EXPIRY',
+    name: '', container_id: 0, quantity: '1',
+    lifecycle_enabled: false, lifecycle_type: 'EXPIRY',
     start_date: '', expiry_date: '', remind_days: '7', lifecycle_notes: '',
   })
   const filteredContainers = computed<Container[]>(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
   const containerModalOpen = ref(false)
   const containerEditingId = ref<number | null>(null)
-  const containerForm = reactive({ name: '', notes: '', owner_id: 1 })
+  const containerForm = reactive({ name: '', notes: '', owner_id: 1, group_id: null as number | null })
   const containerAttachments = ref<Attachment[]>([])
   const containerPendingFiles = ref<File[]>([])
   const containerPreviews = ref<string[]>([])
   const quickModalOpen = ref(false)
   const quickContainerId = ref(0)
-  const quickRows = ref<QuickRow[]>([{ name: '', quantity: '1', quantity_text: '' }, { name: '', quantity: '1', quantity_text: '' }])
+  const quickRows = ref<QuickRow[]>([{ name: '', quantity: '1' }, { name: '', quantity: '1' }])
   const batchModalOpen = ref(false)
   const batchSelected = ref<number[]>([])
   const batchTargetContainerId = ref(0)
-  const batchCondition = ref('')
-  const batchTags = ref('')
   const historyModalOpen = ref(false)
   const containerHistory = ref<HistoryEntry[]>([])
   const historyContainerName = ref('')
@@ -137,8 +132,7 @@ function createItemModalsImpl(): ItemModals {
     pendingPreviews.value = []
     itemForm.name = ''
     itemForm.container_id = containerId ?? filteredContainers.value[0]?.id ?? store.containers[0]?.id ?? 0
-    itemForm.quantity = '1'; itemForm.quantity_text = ''; itemForm.condition = '正常'
-    itemForm.notes = ''; itemForm.tags = ''
+    itemForm.quantity = '1'
     itemForm.lifecycle_enabled = false; itemForm.lifecycle_type = 'EXPIRY'
     itemForm.start_date = ''; itemForm.expiry_date = ''; itemForm.remind_days = '7'; itemForm.lifecycle_notes = ''
   }
@@ -156,10 +150,6 @@ function createItemModalsImpl(): ItemModals {
     itemForm.name = item.name
     itemForm.container_id = item.container_id
     itemForm.quantity = item.quantity == null ? '' : String(item.quantity)
-    itemForm.quantity_text = item.quantity_text || ''
-    itemForm.condition = item.condition || '正常'
-    itemForm.notes = item.notes || ''
-    itemForm.tags = item.tags || ''
     itemForm.lifecycle_enabled = Boolean(item.lifecycle_type || item.expiry_date)
     itemForm.lifecycle_type = item.lifecycle_type || 'EXPIRY'
     itemForm.start_date = item.lifecycle_start_date || ''
@@ -184,10 +174,6 @@ function createItemModalsImpl(): ItemModals {
     const shared = {
       container_id: Number(itemForm.container_id),
       quantity: itemForm.quantity === '' ? null : Number(itemForm.quantity),
-      quantity_text: itemForm.quantity_text.trim(),
-      condition: itemForm.condition.trim() || '正常',
-      notes: itemForm.notes.trim(),
-      tags: itemForm.tags.trim(),
     }
     const lifecyclePayload = {
       lifecycle_type: itemForm.lifecycle_type,
@@ -368,7 +354,6 @@ function createItemModalsImpl(): ItemModals {
   async function submitQuickEntry(onSaved: () => Promise<void> | void) {
     const rows = quickRows.value.filter(r => r.name.trim()).map(r => ({
       name: r.name.trim(), quantity: r.quantity === '' ? null : Number(r.quantity),
-      quantity_text: r.quantity_text.trim(), condition: '正常', notes: '', tags: '',
     }))
     if (!rows.length) { toast('至少输入一个物品'); return }
     try {
@@ -386,8 +371,6 @@ function createItemModalsImpl(): ItemModals {
     if (!batchSelected.value.length) { toast('请先选择物品'); return }
     const data: Record<string, unknown> = {}
     if (batchTargetContainerId.value) data.container_id = batchTargetContainerId.value
-    if (batchCondition.value.trim()) data.condition = batchCondition.value.trim()
-    if (batchTags.value.trim()) data.tags = batchTags.value.trim()
     if (!Object.keys(data).length) { toast('请选择批量修改内容'); return }
     try {
       await api('/api/items/batch', {
@@ -452,10 +435,6 @@ function createItemModalsImpl(): ItemModals {
     set batchSelected(v) { batchSelected.value = v },
     get batchTargetContainerId() { return batchTargetContainerId.value },
     set batchTargetContainerId(v) { batchTargetContainerId.value = v },
-    get batchCondition() { return batchCondition.value },
-    set batchCondition(v) { batchCondition.value = v },
-    get batchTags() { return batchTags.value },
-    set batchTags(v) { batchTags.value = v },
     get historyModalOpen() { return historyModalOpen.value },
     set historyModalOpen(v) { historyModalOpen.value = v },
     get containerHistory() { return containerHistory.value },
@@ -477,10 +456,11 @@ function createItemModalsImpl(): ItemModals {
       await handleFiles(files, 'item')
       ;(event.target as HTMLInputElement).value = ''
     },
-    openAddContainer() {
+    openAddContainer(groupId: number | null = null) {
       containerEditingId.value = null
       containerForm.name = ''; containerForm.notes = ''
       containerForm.owner_id = store.selectedOwnerId
+      containerForm.group_id = groupId ?? null
       containerAttachments.value = []
       revokeUrls(containerPreviews.value)
       containerPendingFiles.value = []
@@ -492,6 +472,7 @@ function createItemModalsImpl(): ItemModals {
       containerForm.name = container.name
       containerForm.notes = container.notes || ''
       containerForm.owner_id = container.owner_id
+      containerForm.group_id = container.group_id ?? null
       revokeUrls(containerPreviews.value)
       containerPendingFiles.value = []
       containerPreviews.value = []
@@ -504,18 +485,16 @@ function createItemModalsImpl(): ItemModals {
     onContainerFiles: setContainerFiles,
     openQuickEntry() {
       quickContainerId.value = filteredContainers.value[0]?.id ?? 0
-      quickRows.value = [{ name: '', quantity: '1', quantity_text: '' }, { name: '', quantity: '1', quantity_text: '' }]
+      quickRows.value = [{ name: '', quantity: '1' }, { name: '', quantity: '1' }]
       if (!quickContainerId.value) { toast('请先创建箱子'); return }
       quickModalOpen.value = true
     },
     submitQuickEntry,
-    addQuickRow() { quickRows.value.push({ name: '', quantity: '1', quantity_text: '' }) },
+    addQuickRow() { quickRows.value.push({ name: '', quantity: '1' }) },
     removeQuickRow(index: number) { if (quickRows.value.length > 1) quickRows.value.splice(index, 1) },
     openBatch() {
       batchSelected.value = []
       batchTargetContainerId.value = 0
-      batchCondition.value = ''
-      batchTags.value = ''
       batchModalOpen.value = true
     },
     toggleBatch(id: number) {

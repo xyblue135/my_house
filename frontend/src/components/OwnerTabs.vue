@@ -19,7 +19,6 @@ const selectedMember = computed(() => store.members.find(m => m.id === store.sel
 
 <template>
   <div v-if="showOwnerTabs" class="member-tabs">
-    <span>家</span>
     <button v-for="m in members" :key="m.id" :class="{active: store.selectedOwnerId === m.id}" @click="store.setOwner(m.id)">{{ m.name }}</button>
   </div>
 </template>

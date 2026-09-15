@@ -32,8 +32,21 @@ const openContainerId = ref<number | null>(null)
 const filteredContainers = computed(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
 const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
 
+// 按箱子聚合物品，正序（后添加的在后），供卡片渲染可点击的小框
+const itemsByContainer = computed(() => {
+  const map = new Map<number, Item[]>()
+  for (const it of store.items) {
+    const arr = map.get(it.container_id) ?? []
+    arr.push(it)
+    map.set(it.container_id, arr)
+  }
+  for (const arr of map.values()) arr.sort((a, b) => a.id - b.id)
+  return map
+})
+function itemsInContainer(containerId: number): Item[] { return itemsByContainer.value.get(containerId) ?? [] }
+
 function firstChar(name: string) { return (name || '物').trim().charAt(0).toUpperCase() }
-function quantityText(item: Item) { return item.quantity_text || (item.quantity == null ? '未记录' : `${item.quantity} 个`) }
+function quantityText(item: Item) { return item.quantity == null ? '未记录' : `${item.quantity} 个` }
 function formatTime(value?: string | null) { if (!value) return ''; return value.replace('T', ' ').replace(/\.\d+$/, '').slice(0, 16) }
 function lifecycleLabel(type?: string | null) { return ({ EXPIRY:'有效期', WARRANTY:'保修', REPLACE:'建议更换', CHECK:'定期检查' } as Record<string,string>)[type || ''] || '生命周期' }
 
@@ -72,7 +85,7 @@ function goAssistant() { router.push({ name: 'assistant' }) }
       <div class="hero-copy">
         <span class="pill">{{ selectedMember?.name }}的物品</span>
         <h2>家里的东西，按人分清楚。</h2>
-        <p>当前版本只区分"我 / 爸 / 妈"，暂不加入具体房间层级。现有数据默认全部归到"我"。</p>
+        <p>按用户分开收纳，每个用户还能用分组（如房间A / 房间B）区分盒子的位置。</p>
       </div>
       <button class="hero-ai" @click="goAssistant">问 AI <span>→</span></button>
     </div>
@@ -93,7 +106,7 @@ function goAssistant() { router.push({ name: 'assistant' }) }
     <div class="toolbar storage-toolbar">
       <label class="search-box">
         <span>⌕</span>
-        <input v-model="search" :placeholder="`搜索${selectedMember?.name || ''}的物品、标签、箱子…`" @input="onSearchInput" />
+        <input v-model="search" :placeholder="`搜索${selectedMember?.name || ''}的物品、箱子…`" @input="onSearchInput" />
         <kbd>Ctrl K</kbd>
       </label>
       <button class="outline-btn" @click="clearSearch">清除</button>
@@ -118,7 +131,6 @@ function goAssistant() { router.push({ name: 'assistant' }) }
           </div>
           <h4>{{ item.name }}</h4>
           <div class="location">{{ item.owner_name }} · {{ item.container_name }}</div>
-          <p v-if="item.notes" class="item-notes">{{ item.notes }}</p>
           <div class="item-meta">
             <span class="chip">{{ quantityText(item) }}</span>
             <span v-if="item.expiry_date" class="chip life">{{ lifecycleLabel(item.lifecycle_type) }} {{ item.expiry_date }}</span>
@@ -136,7 +148,7 @@ function goAssistant() { router.push({ name: 'assistant' }) }
     <section v-else>
       <div class="section-head">
         <div><h3>{{ selectedMember?.name }}的箱子</h3><p>点击箱子查看里面的物品；箱子详情里可以打开操作记录。</p></div>
-        <button class="outline-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
+        <button class="outline-btn" @click="modals.openAddContainer()">＋ 新建箱子</button>
       </div>
       <div v-if="filteredContainers.length" class="containers-grid">
         <article v-for="item in filteredContainers" :key="item.id" class="container-card" @click="openContainerDetail(item.id)">
@@ -146,7 +158,10 @@ function goAssistant() { router.push({ name: 'assistant' }) }
             <span class="owner-badge">{{ item.owner_name }}</span>
           </div>
           <h4>{{ item.name }}</h4>
-          <div class="item-names">{{ item.item_names || '' }}</div>
+          <div class="item-chips">
+            <button v-for="it in itemsInContainer(item.id)" :key="it.id" class="item-chip" @click.stop="onItemEdit(it)">{{ it.name }}</button>
+            <span v-if="!itemsInContainer(item.id).length" class="muted">暂无物品</span>
+          </div>
           <p>{{ item.notes || '空备注' }}</p>
           <div class="container-bottom">
             <button class="open-btn" @click.stop="openContainerDetail(item.id)">打开</button>
@@ -156,7 +171,7 @@ function goAssistant() { router.push({ name: 'assistant' }) }
       <div v-else class="empty">
         <h3>{{ selectedMember?.name }}还没有箱子</h3>
         <p>先创建箱子，再添加物品。</p>
-        <button class="primary-btn" @click="modals.openAddContainer">创建第一个箱子</button>
+        <button class="primary-btn" @click="modals.openAddContainer()">创建第一个箱子</button>
       </div>
     </section>
 

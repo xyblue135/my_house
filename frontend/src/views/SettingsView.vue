@@ -3,10 +3,12 @@ import { ref } from 'vue'
 import { api, getApiBase, getLanToken, setApiBase, setLanToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
-import type { AiSettings, MqStatus } from '../types'
+import { useAppBootstrap } from '../composables/useAppBootstrap'
+import type { AiSettings, Member, MqStatus } from '../types'
 
 const store = useAppStore()
 const { toast } = useToast()
+const { refreshData } = useAppBootstrap()
 
 const apiKeyInput = ref('')
 const showApiKey = ref(false)
@@ -44,10 +46,60 @@ async function refreshMqStatus() {
   try { Object.assign(store.mqStatus, await api<MqStatus>('/api/mq/status')) }
   catch (error) { toast((error as Error).message) }
 }
+
+// ---- 成员管理 ----
+const newMemberName = ref('')
+async function addMember() {
+  const name = newMemberName.value.trim()
+  if (!name) { toast('请输入用户名称'); return }
+  try {
+    await api('/api/members', { method: 'POST', body: JSON.stringify({ name }) })
+    newMemberName.value = ''
+    await refreshData()
+    toast('已新建用户')
+  } catch (error) { toast((error as Error).message) }
+}
+async function renameMember(m: Member) {
+  const name = m.name.trim()
+  if (!name) { toast('用户名称不能为空'); return }
+  try {
+    await api(`/api/members/${m.id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+    await refreshData()
+    toast('已改名')
+  } catch (error) { toast((error as Error).message) }
+}
+async function deleteMember(m: Member) {
+  if (!window.confirm(`删除用户「${m.name}」及其名下所有箱子、物品、记录？此操作不可恢复。`)) return
+  try {
+    await api(`/api/members/${m.id}`, { method: 'DELETE' })
+    await refreshData()
+    toast('已删除用户')
+  } catch (error) { toast((error as Error).message) }
+}
 </script>
 
 <template>
   <div class="view active">
+    <div class="settings-card">
+      <div class="settings-title">
+        <div class="settings-icon">👥</div>
+        <div>
+          <h3>成员管理</h3>
+          <p>每个用户独立拥有箱子、分组和物品视角。删除用户会一并删除其名下所有数据。</p>
+        </div>
+      </div>
+      <div class="member-manage-list">
+        <div v-for="m in store.members" :key="m.id" class="member-manage-row">
+          <input v-model="m.name" @change="renameMember(m)" />
+          <button class="outline-btn danger-outline" :disabled="store.members.length <= 1" @click="deleteMember(m)">删除</button>
+        </div>
+      </div>
+      <div class="member-manage-add">
+        <input v-model="newMemberName" placeholder="新用户名称" @keyup.enter="addMember" />
+        <button class="primary-btn" @click="addMember">＋ 新建用户</button>
+      </div>
+    </div>
+
     <div class="settings-card">
       <div class="settings-title">
         <div class="settings-icon">API</div>

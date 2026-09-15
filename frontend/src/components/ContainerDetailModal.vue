@@ -23,7 +23,7 @@ const items = computed(() => {
 })
 
 function firstChar(name: string) { return (name || '物').trim().charAt(0).toUpperCase() }
-function quantityText(item: Item) { return item.quantity_text || (item.quantity == null ? '未记录' : `${item.quantity} 个`) }
+function quantityText(item: Item) { return item.quantity == null ? '未记录' : `${item.quantity} 个` }
 function openCoverPreview(id: number | null | undefined) { if (id) preview.open([attachmentUrl(id)]) }
 function onItemEdit(item: Item) { modals.openEditItem(item) }
 function onItemDelete(item: Item) { modals.deleteItem(item, () => refreshData()) }
@@ -69,7 +69,6 @@ onBeforeUnmount(() => {
           </div>
           <div class="container-item-main">
             <h4>{{ item.name }}</h4>
-            <p>{{ item.notes }}</p>
             <div class="item-meta">
               <span class="chip">{{ quantityText(item) }}</span>
               <span v-if="item.expiry_date" class="chip life">{{ item.expiry_date }}</span>

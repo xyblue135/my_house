@@ -105,3 +105,28 @@ body.preview-open{overflow:hidden}
 .container-card.dragging{opacity:.45}
 .container-card[draggable="true"]{cursor:grab}
 .container-card[draggable="true"]:active{cursor:grabbing}
+/* ===== 物品小框（盒子卡片内，可点击进入编辑） ===== */
+.item-chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px;flex:1;align-content:flex-start}
+.item-chip{border:1px solid #e2e0ff;background:#f5f4ff;color:#5f52ee;border-radius:8px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;transition:.12s}
+.item-chip:hover{background:#6d5dfc;color:#fff;border-color:#6d5dfc}
+
+/* ===== 物品编辑页图片放大 ===== */
+.preview-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+.preview-item img{height:110px}
+.attachment-row .attachment-thumb{width:64px;height:64px}
+/* ===== 成员管理（设置页） ===== */
+.member-manage-list{display:grid;gap:8px;margin-top:14px}
+.member-manage-row{display:flex;gap:8px;align-items:center}
+.member-manage-row input{flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:#101828;outline:none}
+.member-manage-row input:focus{border-color:#9e95ff}
+.member-manage-add{display:flex;gap:8px;margin-top:12px}
+.member-manage-add input{flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:#101828;outline:none}
+
+/* ===== 分组 tab（箱子管理页） ===== */
+.group-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.group-tab{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:#fff;color:#475467;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;transition:.12s;font-family:inherit}
+.group-tab.active{background:#6d5dfc;border-color:#6d5dfc;color:#fff}
+.group-tab .group-del{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.12);font-size:11px;line-height:1}
+.group-tab.active .group-del{background:rgba(255,255,255,.28)}
+.group-add{border:1px dashed #c9c5ff;background:transparent;color:#5f52ee;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.group-add:hover{background:#f5f4ff}
