@@ -87,9 +87,9 @@ body.preview-open{overflow:hidden}
 @media (max-width:640px){.preview-nav{display:none}}
 
 /* ===== 卡片固定高度 + 单行截断（对齐虚拟滚动 item-size，防止内容溢出盒子） ===== */
-.container-card{height:264px;overflow:hidden;display:flex;flex-direction:column}
+.container-card{min-height:264px;display:flex;flex-direction:column}
 .container-card h4{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item-names{font-size:11px;color:#5f52ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:18px;line-height:18px;margin:2px 0}
+.item-names{font-size:11px;color:#5f52ee;white-space:normal;line-height:18px;min-height:18px;margin:2px 0;word-break:break-all;flex:1}
 .item-card{height:168px;overflow:hidden}
 .item-card h4{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item-notes{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
