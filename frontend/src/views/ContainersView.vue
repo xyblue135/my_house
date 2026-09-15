@@ -49,9 +49,9 @@ function moveSort(index: number, delta: number) {
   sortList.value = arr
 }
 // 拖拽排序（桌面端）：拖到目标卡片上即插入到该位置
-let dragIndex: number | null = null
+const dragIndex = ref<number | null>(null)
 function onDragStart(index: number, event: DragEvent) {
-  dragIndex = index
+  dragIndex.value = index
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     try { event.dataTransfer.setData('text/plain', String(index)) } catch { /* ignore */ }
@@ -59,15 +59,15 @@ function onDragStart(index: number, event: DragEvent) {
 }
 function onDragOver(event: DragEvent, index: number) {
   event.preventDefault()
-  if (dragIndex == null || dragIndex === index) return
-  const from = dragIndex
+  if (dragIndex.value == null || dragIndex.value === index) return
+  const from = dragIndex.value
   const arr = [...sortList.value]
   const [item] = arr.splice(from, 1)
   arr.splice(index, 0, item)
   sortList.value = arr
-  dragIndex = index
+  dragIndex.value = index
 }
-function onDragEnd() { dragIndex = null }
+function onDragEnd() { dragIndex.value = null }
 async function saveSort() {
   const ids = sortList.value.map(c => c.id)
   try {
