@@ -5,7 +5,6 @@ import { useToast } from './useToast'
 import { compressFiles, compressImage, objectUrl } from '../utils/image'
 import type { Attachment, Container, HistoryEntry, Item } from '../types'
 
-interface QuickRow { name: string; quantity: string }
 interface ItemForm {
   name: string; container_id: number; quantity: string;
   expiry_enabled: boolean;
@@ -31,12 +30,6 @@ export interface ItemModals {
   containerAttachments: Attachment[]
   containerPendingFiles: File[]
   containerPreviews: string[]
-  quickModalOpen: boolean
-  quickContainerId: number
-  quickRows: QuickRow[]
-  batchModalOpen: boolean
-  batchSelected: number[]
-  batchTargetContainerId: number
   historyModalOpen: boolean
   containerHistory: HistoryEntry[]
   historyContainerName: string
@@ -54,13 +47,6 @@ export interface ItemModals {
   deleteContainer: (onSaved: () => Promise<void> | void, onAfter?: () => void) => Promise<void>
   deleteContainerAttachment: (a: Attachment) => Promise<void>
   onContainerFiles: (event: Event) => Promise<void>
-  openQuickEntry: () => void
-  submitQuickEntry: (onSaved: () => Promise<void> | void) => Promise<void>
-  addQuickRow: () => void
-  removeQuickRow: (index: number) => void
-  openBatch: () => void
-  toggleBatch: (id: number) => void
-  submitBatch: (onSaved: () => Promise<void> | void) => Promise<void>
   openHistory: (container: Container) => Promise<void>
   undoHistory: (entry: HistoryEntry, onSaved: () => Promise<void> | void) => Promise<void>
   apiUrl: (path: string) => string
@@ -106,12 +92,6 @@ function createItemModalsImpl(): ItemModals {
   const containerAttachments = ref<Attachment[]>([])
   const containerPendingFiles = ref<File[]>([])
   const containerPreviews = ref<string[]>([])
-  const quickModalOpen = ref(false)
-  const quickContainerId = ref(0)
-  const quickRows = ref<QuickRow[]>([{ name: '', quantity: '1' }, { name: '', quantity: '1' }])
-  const batchModalOpen = ref(false)
-  const batchSelected = ref<number[]>([])
-  const batchTargetContainerId = ref(0)
   const historyModalOpen = ref(false)
   const containerHistory = ref<HistoryEntry[]>([])
   const historyContainerName = ref('')
@@ -361,38 +341,6 @@ function createItemModalsImpl(): ItemModals {
     } catch (error) { toast((error as Error).message) }
   }
 
-  async function submitQuickEntry(onSaved: () => Promise<void> | void) {
-    const rows = quickRows.value.filter(r => r.name.trim()).map(r => ({
-      name: r.name.trim(), quantity: r.quantity === '' ? null : Number(r.quantity),
-    }))
-    if (!rows.length) { toast('至少输入一个物品'); return }
-    try {
-      await api('/api/items/quick-entry', {
-        method: 'POST',
-        body: JSON.stringify({ container_id: quickContainerId.value, items: rows }),
-      })
-      quickModalOpen.value = false
-      toast(`已快速录入 ${rows.length} 类物品`)
-      await onSaved()
-    } catch (error) { toast((error as Error).message) }
-  }
-
-  async function submitBatch(onSaved: () => Promise<void> | void) {
-    if (!batchSelected.value.length) { toast('请先选择物品'); return }
-    const data: Record<string, unknown> = {}
-    if (batchTargetContainerId.value) data.container_id = batchTargetContainerId.value
-    if (!Object.keys(data).length) { toast('请选择批量修改内容'); return }
-    try {
-      await api('/api/items/batch', {
-        method: 'POST',
-        body: JSON.stringify({ ids: batchSelected.value, data }),
-      })
-      batchModalOpen.value = false
-      toast(`已批量修改 ${batchSelected.value.length} 类物品`)
-      await onSaved()
-    } catch (error) { toast((error as Error).message) }
-  }
-
   async function openHistory(container: Container) {
     historyContainerName.value = container.name
     containerHistory.value = await api<HistoryEntry[]>(`/api/history?container_id=${container.id}&limit=100`)
@@ -433,18 +381,6 @@ function createItemModalsImpl(): ItemModals {
     set containerPendingFiles(v) { containerPendingFiles.value = v },
     get containerPreviews() { return containerPreviews.value },
     set containerPreviews(v) { containerPreviews.value = v },
-    get quickModalOpen() { return quickModalOpen.value },
-    set quickModalOpen(v) { quickModalOpen.value = v },
-    get quickContainerId() { return quickContainerId.value },
-    set quickContainerId(v) { quickContainerId.value = v },
-    get quickRows() { return quickRows.value },
-    set quickRows(v) { quickRows.value = v },
-    get batchModalOpen() { return batchModalOpen.value },
-    set batchModalOpen(v) { batchModalOpen.value = v },
-    get batchSelected() { return batchSelected.value },
-    set batchSelected(v) { batchSelected.value = v },
-    get batchTargetContainerId() { return batchTargetContainerId.value },
-    set batchTargetContainerId(v) { batchTargetContainerId.value = v },
     get historyModalOpen() { return historyModalOpen.value },
     set historyModalOpen(v) { historyModalOpen.value = v },
     get containerHistory() { return containerHistory.value },
@@ -493,26 +429,6 @@ function createItemModalsImpl(): ItemModals {
     deleteContainer,
     deleteContainerAttachment,
     onContainerFiles: setContainerFiles,
-    openQuickEntry() {
-      quickContainerId.value = filteredContainers.value[0]?.id ?? 0
-      quickRows.value = [{ name: '', quantity: '1' }, { name: '', quantity: '1' }]
-      if (!quickContainerId.value) { toast('请先创建箱子'); return }
-      quickModalOpen.value = true
-    },
-    submitQuickEntry,
-    addQuickRow() { quickRows.value.push({ name: '', quantity: '1' }) },
-    removeQuickRow(index: number) { if (quickRows.value.length > 1) quickRows.value.splice(index, 1) },
-    openBatch() {
-      batchSelected.value = []
-      batchTargetContainerId.value = 0
-      batchModalOpen.value = true
-    },
-    toggleBatch(id: number) {
-      batchSelected.value = batchSelected.value.includes(id)
-        ? batchSelected.value.filter(x => x !== id)
-        : [...batchSelected.value, id]
-    },
-    submitBatch,
     openHistory,
     undoHistory,
     apiUrl,

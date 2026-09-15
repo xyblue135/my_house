@@ -23,11 +23,8 @@ function previewAttachments(attachments: Attachment[], currentId: number) {
 function onItemSaved() { return refreshData() }
 function onContainerSaved() { return refreshData() }
 function onContainerDeleted() { return refreshData() }
-function onQuickSaved() { return refreshData() }
-function onBatchSaved() { return refreshData() }
 function onHistorySaved() { return refreshData() }
 
-const filteredItems = computed(() => store.items.filter(i => i.owner_id === store.selectedOwnerId))
 // 箱子表单里「分组」下拉：跟随当前选择的归属成员
 const currentGroups = computed(() => store.groups.filter(g => g.owner_id === modals.containerForm.owner_id))
 
@@ -155,64 +152,6 @@ function formatTime(value?: string | null) {
           <button class="primary-btn">{{ modals.containerEditingId ? '保存' : '创建' }}</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Quick entry modal -->
-  <div v-if="modals.quickModalOpen" class="modal-backdrop" @click.self="modals.quickModalOpen = false">
-    <div class="modal wide">
-      <div class="modal-head"><div><p class="eyebrow">QUICK ENTRY</p><h3>快速录入</h3></div>
-        <button class="icon-btn" @click="modals.quickModalOpen = false">×</button>
-      </div>
-      <form @submit.prevent="modals.submitQuickEntry(onQuickSaved)">
-        <div class="quick-head">
-          <label>统一放入箱子
-            <select v-model.number="modals.quickContainerId">
-              <option v-for="c in modals.filteredContainers" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </label>
-        </div>
-        <div class="quick-table">
-          <div class="quick-row head"><span>名称</span><span>数量</span><span></span></div>
-          <div v-for="(r, index) in modals.quickRows" :key="index" class="quick-row">
-            <input v-model="r.name" placeholder="物品名称" />
-            <input v-model="r.quantity" type="number" min="0" />
-            <button type="button" class="icon-btn" @click="modals.removeQuickRow(index)">×</button>
-          </div>
-        </div>
-        <button type="button" class="text-btn" @click="modals.addQuickRow">＋ 再加一行</button>
-        <div class="modal-actions">
-          <button type="button" class="outline-btn" @click="modals.quickModalOpen = false">取消</button>
-          <button class="primary-btn">一次录入</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Batch modal -->
-  <div v-if="modals.batchModalOpen" class="modal-backdrop" @click.self="modals.batchModalOpen = false">
-    <div class="modal wide">
-      <div class="modal-head"><div><p class="eyebrow">BATCH</p><h3>批量操作 · {{ store.members.find(m => m.id === store.selectedOwnerId)?.name }}</h3></div>
-        <button class="icon-btn" @click="modals.batchModalOpen = false">×</button>
-      </div>
-      <div class="batch-list">
-        <label v-for="item in filteredItems" :key="item.id" :class="{selected: modals.batchSelected.includes(item.id)}">
-          <input type="checkbox" :checked="modals.batchSelected.includes(item.id)" @change="modals.toggleBatch(item.id)" />
-          <span><b>{{ item.name }}</b><small>{{ item.container_name }}</small></span>
-        </label>
-      </div>
-      <div class="batch-controls">
-        <label>移动到箱子
-          <select v-model.number="modals.batchTargetContainerId">
-            <option :value="0">不修改位置</option>
-            <option v-for="c in modals.filteredContainers" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </label>
-      </div>
-      <div class="modal-actions">
-        <span class="muted">已选择 {{ modals.batchSelected.length }} 类</span>
-        <button class="primary-btn" @click="modals.submitBatch(onBatchSaved)">执行批量修改</button>
-      </div>
     </div>
   </div>
 
