@@ -48,6 +48,26 @@ function moveSort(index: number, delta: number) {
   arr.splice(target, 0, item)
   sortList.value = arr
 }
+// 拖拽排序（桌面端）：拖到目标卡片上即插入到该位置
+let dragIndex: number | null = null
+function onDragStart(index: number, event: DragEvent) {
+  dragIndex = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    try { event.dataTransfer.setData('text/plain', String(index)) } catch { /* ignore */ }
+  }
+}
+function onDragOver(event: DragEvent, index: number) {
+  event.preventDefault()
+  if (dragIndex == null || dragIndex === index) return
+  const from = dragIndex
+  const arr = [...sortList.value]
+  const [item] = arr.splice(from, 1)
+  arr.splice(index, 0, item)
+  sortList.value = arr
+  dragIndex = index
+}
+function onDragEnd() { dragIndex = null }
 async function saveSort() {
   const ids = sortList.value.map(c => c.id)
   try {
@@ -87,7 +107,12 @@ async function saveSort() {
         v-for="(item, index) in displayContainers"
         :key="item.id"
         class="container-card"
-        :class="{ 'sort-editing': editingSort }"
+        :class="{ 'sort-editing': editingSort, dragging: dragIndex === index }"
+        :draggable="editingSort"
+        @dragstart="onDragStart(index, $event)"
+        @dragover="onDragOver($event, index)"
+        @drop.prevent
+        @dragend="onDragEnd"
         @click="editingSort ? undefined : openContainerDetail(item.id)">
         <div v-if="editingSort" class="sort-controls">
           <button class="icon-btn sort-btn" :disabled="index === 0" @click.stop="moveSort(index, -1)">↑</button>

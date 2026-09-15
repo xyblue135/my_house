@@ -102,3 +102,6 @@ body.preview-open{overflow:hidden}
 .sort-controls{position:absolute;top:8px;left:8px;display:flex;gap:6px;z-index:6}
 .sort-btn{background:#fff;box-shadow:0 2px 8px rgba(16,24,40,.18);border-radius:9px;border:1px solid var(--line);padding:6px 10px;font-size:15px;font-weight:800;color:#344054;cursor:pointer}
 .sort-btn:disabled{opacity:.35;cursor:not-allowed}
+.container-card.dragging{opacity:.45}
+.container-card[draggable="true"]{cursor:grab}
+.container-card[draggable="true"]:active{cursor:grabbing}
