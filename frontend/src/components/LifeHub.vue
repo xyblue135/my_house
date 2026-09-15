@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
-import { LIFE_FEATURES, LIFE_GROUPS, featureFor, type LifeFeature } from '../lifeCatalog'
+import { LIFE_FEATURES, LIFE_GROUPS, featureFor, type LifeFeature, type LifeField } from '../lifeCatalog'
 import type { LifeEntry, LifeOverview, Member } from '../types'
 
 const props = defineProps<{ members: Member[] }>()

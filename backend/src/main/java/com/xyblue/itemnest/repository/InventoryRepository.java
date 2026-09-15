@@ -229,7 +229,7 @@ public class InventoryRepository {
         List<Long> ids = new ArrayList<>();
         for (int i = 0; i < result.length; i++) {
             if (result[i] > 0) {
-                Long id = jdbc.queryForObject("SELECT last_insert_rowid() WHERE rowid = (SELECT max(rowid) FROM items WHERE name = ? AND container_id = ?)", Long.class, names.get(i), containerId);
+                Long id = jdbc.queryForObject("SELECT id FROM items WHERE name = ? AND container_id = ? ORDER BY id DESC LIMIT 1", Long.class, names.get(i), containerId);
                 if (id != null) ids.add(id);
             }
         }

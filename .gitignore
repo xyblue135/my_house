@@ -24,6 +24,5 @@ frontend/.env.android.local
 *.patch
 data/
 
-# Legacy / one-off release bundles and stray pnpm workspace files
+# Legacy / one-off release bundles
 *.bundle
-frontend/pnpm-workspace.yaml

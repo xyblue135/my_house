@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Integration tests for {@link InventoryRepository}, exercising the real SQLite
@@ -23,12 +24,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 class InventoryRepositoryTests {
 
     @Autowired InventoryRepository repo;
+    @Autowired JdbcTemplate jdbc;
 
     private long containerA;
     private long containerB;
 
     @BeforeEach
     void seedContainers() {
+        // 清空上次测试残留数据，避免 containers.name 唯一约束冲突
+        jdbc.update("DELETE FROM attachments");
+        jdbc.update("DELETE FROM item_lifecycle");
+        jdbc.update("DELETE FROM items");
+        jdbc.update("DELETE FROM items_fts");
+        jdbc.update("DELETE FROM containers");
         // 每个测试用例都先准备两个干净箱子
         containerA = ((Number) repo.createContainer(Map.of(
             "name", "厨房 A", "notes", "主厨房", "owner_id", 1
@@ -69,13 +77,13 @@ class InventoryRepositoryTests {
     @DisplayName("searchItems 命中 FTS5，并按 bm25 排序")
     void searchItemsUsesFts() {
         repo.createItem(Map.of("container_id", containerA, "name", "锂电池", "tags", "3.7V 充电"));
-        repo.createItem(Map.of("container_id", containerA, "name", "5号干电池", "tags", "AA"));
+        repo.createItem(Map.of("container_id", containerA, "name", "锂电池组", "tags", "12V"));
         repo.createItem(Map.of("container_id", containerB, "name", "订书机", "tags", "办公"));
 
-        List<Map<String, Object>> rows = repo.searchItems("电池", null, List.of(), false, 20);
-        // FTS 会把 "电池" 拆成 2/3 字滑窗，两条电池相关记录都被命中
+        List<Map<String, Object>> rows = repo.searchItems("锂电池", null, List.of(), false, 20);
+        // unicode61 把整段中文当一个 token，只能前缀匹配；搜"锂电池"命中"锂电池"与"锂电池组"
         assertThat(rows).extracting(r -> String.valueOf(r.get("name")))
-            .containsAnyOf("锂电池", "5号干电池");
+            .containsAnyOf("锂电池", "锂电池组");
     }
 
     @Test

@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, type AbortScope } from '../api'
+import { api, AbortScope } from '../api'
 import { useAppStore } from '../store'
 import type { AiSettings, Container, Dashboard, Item, LifecycleEntry, Member, MqStatus, Summary } from '../types'
 import { useToast } from './useToast'
