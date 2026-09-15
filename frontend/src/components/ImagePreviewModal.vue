@@ -113,12 +113,16 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  document.body.classList.add('preview-open')
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   document.body.classList.remove('preview-open')
 })
+
+// 滚动锁跟随预览开关状态（组件常驻，不能只在 mount/unmount 时增删）
+watch(isOpen, (open) => {
+  document.body.classList.toggle('preview-open', open)
+}, { immediate: true })
 </script>
 
 <template>
