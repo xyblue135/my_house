@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
@@ -30,6 +30,10 @@ function onItemDelete(item: Item) { modals.deleteItem(item, () => refreshData())
 
 watch(() => props.containerId, (id) => {
   document.body.classList.toggle('modal-open', id != null)
+})
+// 组件卸载（如切换路由）时兜底移除，避免 body 级 class 残留锁死滚动
+onBeforeUnmount(() => {
+  document.body.classList.remove('modal-open')
 })
 </script>
 
