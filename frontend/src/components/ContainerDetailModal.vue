@@ -16,7 +16,11 @@ const { refreshData } = useAppBootstrap()
 const preview = useImagePreview()
 
 const container = computed(() => props.containerId == null ? null : store.containers.find(c => c.id === props.containerId) ?? null)
-const items = computed(() => props.containerId == null ? [] : store.items.filter(i => i.container_id === props.containerId))
+// 箱内物品按添加先后正序显示（后添加的排在后面）
+const items = computed(() => {
+  if (props.containerId == null) return []
+  return store.items.filter(i => i.container_id === props.containerId).sort((a, b) => a.id - b.id)
+})
 
 function firstChar(name: string) { return (name || '物').trim().charAt(0).toUpperCase() }
 function quantityText(item: Item) { return item.quantity_text || (item.quantity == null ? '未记录' : `${item.quantity} 个`) }
@@ -47,8 +51,7 @@ watch(() => props.containerId, (id) => {
         <button class="icon-btn" @click="emit('close')">×</button>
       </div>
       <div class="container-detail-toolbar">
-        <span>{{ container.item_count }} 类 · {{ container.quantity_sum }} 件/组</span>
-        <div class="inline-actions">
+        <div class="inline-actions" style="margin-left:auto">
           <button class="outline-btn compact" @click="modals.openHistory(container)">操作记录</button>
           <button class="outline-btn compact" @click="modals.openEditContainer(container)">编辑箱子</button>
           <button class="primary-btn compact" @click="modals.openAddItem(container.id)">＋ 放入物品</button>
