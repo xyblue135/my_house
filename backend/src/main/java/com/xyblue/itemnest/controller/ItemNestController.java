@@ -77,6 +77,16 @@ public class ItemNestController {
         } catch (DataIntegrityViolationException ex) { throw new ApiException(HttpStatus.CONFLICT, "箱子名称已存在"); }
     }
 
+    @PostMapping("/containers/reorder")
+    public Map<String, Object> reorderContainers(@RequestBody Map<String, Object> payload) {
+        long ownerId = payload.get("owner_id") == null ? 1 : requireId(payload.get("owner_id"), "家庭成员不存在");
+        requireMember(ownerId);
+        List<Long> ids = longList(payload.get("ids"));
+        if (ids.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "排序列表不能为空");
+        repository.reorderContainers(ownerId, ids);
+        return Map.of("ok", true);
+    }
+
     @PatchMapping("/containers/{id}")
     public Map<String, Object> patchContainer(@PathVariable long id, @RequestBody Map<String, Object> payload) {
         Map<String, Object> before = requireContainer(id);

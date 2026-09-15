@@ -42,11 +42,11 @@ public class InventoryRepository {
                    COALESCE(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE COALESCE(i.quantity, 1) END), 0) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
-                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id DESC) x) AS item_names
+                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id ASC) x) AS item_names
             FROM containers c
             JOIN household_members m ON m.id = c.owner_id
             LEFT JOIN items i ON i.container_id = c.id
-            """ + (ownerId == null ? "" : " WHERE c.owner_id = ?") + " GROUP BY c.id ORDER BY c.owner_id, c.id";
+            """ + (ownerId == null ? "" : " WHERE c.owner_id = ?") + " GROUP BY c.id ORDER BY c.owner_id, c.sort_order, c.id";
         return ownerId == null ? jdbc.queryForList(sql) : jdbc.queryForList(sql, ownerId);
     }
 
@@ -57,7 +57,7 @@ public class InventoryRepository {
                    (SELECT COALESCE(SUM(COALESCE(i.quantity, 1)),0) FROM items i WHERE i.container_id = c.id) AS quantity_sum,
                    (SELECT COUNT(*) FROM attachments a WHERE a.container_id = c.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.container_id = c.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
-                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id DESC) x) AS item_names
+                   (SELECT GROUP_CONCAT(x.name, '、') FROM (SELECT i.name FROM items i WHERE i.container_id = c.id ORDER BY i.id ASC) x) AS item_names
             FROM containers c JOIN household_members m ON m.id = c.owner_id WHERE c.id = ?
             """, id);
         return rows.isEmpty() ? null : rows.getFirst();
@@ -70,8 +70,8 @@ public class InventoryRepository {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO containers(name, notes, owner_id) VALUES (?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, name); ps.setString(2, notes); ps.setLong(3, ownerId); return ps;
+                "INSERT INTO containers(name, notes, owner_id, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM containers WHERE owner_id = ?))", Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, name); ps.setString(2, notes); ps.setLong(3, ownerId); ps.setLong(4, ownerId); return ps;
         }, key);
         return getContainer(key.getKey().longValue());
     }
@@ -80,6 +80,12 @@ public class InventoryRepository {
         updateDynamic("containers", id, data, CONTAINER_FIELDS);
         refreshFtsForContainer(id);
         return getContainer(id);
+    }
+
+    public void reorderContainers(long ownerId, List<Long> ids) {
+        for (int i = 0; i < ids.size(); i++) {
+            jdbc.update("UPDATE containers SET sort_order = ? WHERE id = ? AND owner_id = ?", i + 1, ids.get(i), ownerId);
+        }
     }
 
     public boolean deleteContainer(long id) {

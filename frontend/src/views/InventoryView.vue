@@ -160,10 +160,9 @@ onMounted(() => {
           </div>
           <h4>{{ item.name }}</h4>
           <div class="item-names">{{ item.item_names || '' }}</div>
-          <p>{{ item.notes || '收纳位置' }}</p>
+          <p>{{ item.notes || '空备注' }}</p>
           <div class="container-bottom">
-            <span>{{ item.item_count }} 类 · 约 {{ item.quantity_sum }} 件/组</span>
-            <span>打开 →</span>
+            <button class="open-btn" @click.stop="openContainerDetail(item.id)">打开</button>
           </div>
         </article>
       </div>

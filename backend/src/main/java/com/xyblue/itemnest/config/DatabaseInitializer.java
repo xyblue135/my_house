@@ -181,6 +181,10 @@ public class DatabaseInitializer implements ApplicationRunner {
             jdbc.execute("ALTER TABLE containers ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 1");
         }
         jdbc.update("UPDATE containers SET owner_id = 1 WHERE owner_id IS NULL OR owner_id NOT IN (1,2,3)");
+        if (!hasColumn("containers", "sort_order")) {
+            jdbc.execute("ALTER TABLE containers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+            jdbc.update("UPDATE containers SET sort_order = id");
+        }
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_owner ON containers(owner_id, id)");
     }
 
