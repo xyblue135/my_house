@@ -32,7 +32,10 @@ function formatTime(value?: string | null) {
         <button class="icon-btn" @click="modals.itemModalOpen = false">×</button>
       </div>
       <form class="modal-form" @submit.prevent="modals.saveItem(onItemSaved)">
-        <label class="span-2">物品名称<input v-model="modals.itemForm.name" required /></label>
+        <label class="span-2">物品名称
+          <textarea v-model="modals.itemForm.name" rows="2" required placeholder="单个名称，或每行一个名称批量添加"></textarea>
+          <span class="muted">可每行输入一个名称，一次添加多个属性一致的物品</span>
+        </label>
         <label>所在箱子
           <select v-model.number="modals.itemForm.container_id" required>
             <option v-for="c in store.containers" :key="c.id" :value="c.id">{{ c.owner_name }} / {{ c.name }}</option>

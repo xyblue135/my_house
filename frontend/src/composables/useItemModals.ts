@@ -145,8 +145,14 @@ function createItemModalsImpl(): ItemModals {
   }
 
   async function saveItem(onSaved: () => Promise<void> | void) {
-    const payload = {
-      name: itemForm.name.trim(),
+    // 名称支持多行批量：每行一个名称，其余属性（箱子/数量/状态/标签/备注/生命周期）保持一致
+    const names = itemForm.name
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+    if (!names.length) { toast('请输入物品名称'); return }
+
+    const shared = {
       container_id: Number(itemForm.container_id),
       quantity: itemForm.quantity === '' ? null : Number(itemForm.quantity),
       quantity_text: itemForm.quantity_text.trim(),
@@ -154,28 +160,51 @@ function createItemModalsImpl(): ItemModals {
       notes: itemForm.notes.trim(),
       tags: itemForm.tags.trim(),
     }
+    const lifecyclePayload = {
+      lifecycle_type: itemForm.lifecycle_type,
+      start_date: itemForm.start_date || null,
+      expiry_date: itemForm.expiry_date || null,
+      remind_days: Number(itemForm.remind_days || 7),
+      notes: itemForm.lifecycle_notes.trim(),
+    }
+
     try {
-      const saved = await api<Item>(
-        itemEditingId.value ? `/api/items/${itemEditingId.value}` : '/api/items',
-        { method: itemEditingId.value ? 'PATCH' : 'POST', body: JSON.stringify(payload) }
-      )
-      if (itemForm.lifecycle_enabled) {
-        await api(`/api/items/${saved.id}/lifecycle`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            lifecycle_type: itemForm.lifecycle_type,
-            start_date: itemForm.start_date || null,
-            expiry_date: itemForm.expiry_date || null,
-            remind_days: Number(itemForm.remind_days || 7),
-            notes: itemForm.lifecycle_notes.trim(),
-          }),
+      if (itemEditingId.value) {
+        // 编辑模式：仍是单个物品
+        const saved = await api<Item>(`/api/items/${itemEditingId.value}`, {
+          method: 'PATCH', body: JSON.stringify({ ...shared, name: names[0] }),
         })
-      } else if (itemEditingId.value && (saved.lifecycle_type || saved.expiry_date)) {
-        await api(`/api/items/${saved.id}/lifecycle`, { method: 'DELETE' })
+        if (itemForm.lifecycle_enabled) {
+          await api(`/api/items/${saved.id}/lifecycle`, { method: 'PUT', body: JSON.stringify(lifecyclePayload) })
+        } else if (saved.lifecycle_type || saved.expiry_date) {
+          await api(`/api/items/${saved.id}/lifecycle`, { method: 'DELETE' })
+        }
+        if (pendingFiles.value.length) await uploadPending(saved.id)
+        itemModalOpen.value = false
+        toast('已保存修改')
+      } else {
+        // 新增模式：支持批量（多行名称）或单个
+        let firstId = 0
+        for (const name of names) {
+          const saved = await api<Item>('/api/items', {
+            method: 'POST', body: JSON.stringify({ ...shared, name }),
+          })
+          if (!firstId) firstId = saved.id
+          if (itemForm.lifecycle_enabled) {
+            await api(`/api/items/${saved.id}/lifecycle`, { method: 'PUT', body: JSON.stringify(lifecyclePayload) })
+          }
+        }
+        // 附件只绑定单个物品；批量时若选了附件则跳过并提示
+        if (names.length === 1 && pendingFiles.value.length) await uploadPending(firstId)
+        itemModalOpen.value = false
+        if (names.length > 1) {
+          toast(pendingFiles.value.length
+            ? `已批量添加 ${names.length} 类物品（附件未保存，请单独编辑补充）`
+            : `已批量添加 ${names.length} 类物品`)
+        } else {
+          toast('已添加物品')
+        }
       }
-      if (pendingFiles.value.length) await uploadPending(saved.id)
-      itemModalOpen.value = false
-      toast(itemEditingId.value ? '已保存修改' : '已添加物品')
       await onSaved()
     } catch (error) { toast((error as Error).message) }
   }
