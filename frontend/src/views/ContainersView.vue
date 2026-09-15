@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RecycleScroller } from 'vue-virtual-scroller'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
@@ -35,14 +34,8 @@ function onItemSaved() { return refreshData() }
         <button class="primary-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
       </div>
     </div>
-    <RecycleScroller
-      v-if="filteredContainers.length"
-      :items="filteredContainers"
-      :item-size="264"
-      key-field="id"
-      class="virtual-list containers-grid"
-      v-slot="{ item }">
-      <article class="container-card" @click="modals.openHistory(item)">
+    <div v-if="filteredContainers.length" class="containers-grid">
+      <article v-for="item in filteredContainers" :key="item.id" class="container-card" @click="modals.openHistory(item)">
         <div class="container-cover">
           <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
           <div v-else class="container-cover-empty">▦</div>
@@ -56,7 +49,7 @@ function onItemSaved() { return refreshData() }
           <span>查看记录 →</span>
         </div>
       </article>
-    </RecycleScroller>
+    </div>
     <div v-else class="empty">
       <h3>{{ selectedMember?.name }}还没有箱子</h3>
       <p>在物品总览或这里直接创建第一个箱子。</p>

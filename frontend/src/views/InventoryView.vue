@@ -117,14 +117,8 @@ onMounted(() => {
       <div class="section-head">
         <div><h3>FTS5 搜索结果</h3><p>{{ searchResults.length }} 条 · 已按"{{ selectedMember?.name }}"范围过滤</p></div>
       </div>
-      <RecycleScroller
-        v-if="searchResults.length"
-        :items="searchResults"
-        :item-size="168"
-        key-field="id"
-        class="virtual-list items-grid"
-        v-slot="{ item }">
-        <article class="item-card">
+      <div v-if="searchResults.length" class="items-grid">
+        <article v-for="item in searchResults" :key="item.id" class="item-card">
           <div class="item-top">
             <div class="item-icon thumb">
               <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
@@ -144,7 +138,7 @@ onMounted(() => {
             <span v-if="item.attachment_count" class="chip">附件 {{ item.attachment_count }}</span>
           </div>
         </article>
-      </RecycleScroller>
+      </div>
       <div v-else class="empty">
         <div class="empty-icon">⌕</div>
         <h3>没有匹配</h3>
@@ -157,14 +151,8 @@ onMounted(() => {
         <div><h3>{{ selectedMember?.name }}的箱子</h3><p>点击箱子查看里面的物品；箱子详情里可以打开操作记录。</p></div>
         <button class="outline-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
       </div>
-      <RecycleScroller
-        v-if="filteredContainers.length"
-        :items="filteredContainers"
-        :item-size="264"
-        key-field="id"
-        class="virtual-list containers-grid"
-        v-slot="{ item }">
-        <article class="container-card" @click="openContainerDetail(item.id)">
+      <div v-if="filteredContainers.length" class="containers-grid">
+        <article v-for="item in filteredContainers" :key="item.id" class="container-card" @click="openContainerDetail(item.id)">
           <div class="container-cover">
             <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
             <div v-else class="container-cover-empty">▦</div>
@@ -178,7 +166,7 @@ onMounted(() => {
             <span>打开 →</span>
           </div>
         </article>
-      </RecycleScroller>
+      </div>
       <div v-else class="empty">
         <h3>{{ selectedMember?.name }}还没有箱子</h3>
         <p>先创建箱子，再添加物品。</p>
