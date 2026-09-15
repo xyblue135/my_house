@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import { api, attachmentUrl } from '../api'
@@ -8,6 +8,7 @@ import { useToast } from '../composables/useToast'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useImagePreview } from '../composables/useImagePreview'
+import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import type { HistoryEntry, Item } from '../types'
 
 const store = useAppStore()
@@ -29,9 +30,6 @@ const searching = computed(() => Boolean(search.value.trim()))
 const openContainerId = ref<number | null>(null)
 
 const filteredContainers = computed(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
-const filteredItems = computed(() => store.items.filter(i => i.owner_id === store.selectedOwnerId))
-const openContainer = computed(() => store.containers.find(c => c.id === openContainerId.value) ?? null)
-const openContainerItems = computed(() => openContainerId.value == null ? [] : store.items.filter(i => i.container_id === openContainerId.value))
 const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
 
 function firstChar(name: string) { return (name || '物').trim().charAt(0).toUpperCase() }
@@ -60,23 +58,12 @@ function onItemDelete(item: Item) { modals.deleteItem(item, onItemSaved) }
 function onHistoryUndo(entry: HistoryEntry) {
   modals.undoHistory(entry, async () => {
     await refreshData()
-    if (openContainer.value) await modals.openHistory(openContainer.value)
+    const c = openContainerId.value == null ? null : store.containers.find(x => x.id === openContainerId.value)
+    if (c) await modals.openHistory(c)
   })
 }
 
 function goAssistant() { router.push({ name: 'assistant' }) }
-
-watch(openContainerId, async (newId, oldId) => {
-  if (newId) {
-    await nextTick()
-    document.body.classList.add('modal-open')
-  } else {
-    document.body.classList.remove('modal-open')
-  }
-})
-onMounted(() => {
-  // 初始时已加载，搜索和滚动条无需重置
-})
 </script>
 
 <template>
@@ -199,52 +186,5 @@ onMounted(() => {
     </section>
   </div>
 
-  <div v-if="openContainer" class="modal-backdrop container-detail-backdrop" @click.self="closeContainerDetail">
-    <div class="modal container-detail-modal">
-      <div class="container-detail-head">
-        <div class="container-detail-title-wrap">
-          <div class="container-detail-cover">
-            <img v-if="openContainer.cover_attachment_id" :src="attachmentUrl(openContainer.cover_attachment_id)" alt="" @click.stop="openCoverPreview(openContainer.cover_attachment_id)" />
-            <div v-else class="box-mark large">▦</div>
-          </div>
-          <div>
-            <p class="eyebrow">{{ openContainer.owner_name }} / CONTAINER</p>
-            <h3>{{ openContainer.name }}</h3>
-            <p class="container-detail-note">{{ openContainer.notes || '收纳位置' }}</p>
-          </div>
-        </div>
-        <button class="icon-btn" @click="closeContainerDetail">×</button>
-      </div>
-      <div class="container-detail-toolbar">
-        <span>{{ openContainer.item_count }} 类 · {{ openContainer.quantity_sum }} 件/组</span>
-        <div class="inline-actions">
-          <button class="outline-btn compact" @click="modals.openHistory(openContainer)">操作记录</button>
-          <button class="outline-btn compact" @click="modals.openEditContainer(openContainer)">编辑箱子</button>
-          <button class="primary-btn compact" @click="modals.openAddItem(openContainer.id)">＋ 放入物品</button>
-        </div>
-      </div>
-      <div v-if="openContainerItems.length" class="container-detail-items">
-        <article v-for="item in openContainerItems" :key="item.id" class="container-item-row">
-          <div class="container-item-icon thumb">
-            <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
-            <template v-else>{{ firstChar(item.name) }}</template>
-          </div>
-          <div class="container-item-main">
-            <h4>{{ item.name }}</h4>
-            <p>{{ item.notes }}</p>
-            <div class="item-meta">
-              <span class="chip">{{ quantityText(item) }}</span>
-              <span v-if="item.expiry_date" class="chip life">{{ item.expiry_date }}</span>
-              <span v-if="item.attachment_count" class="chip">附件 {{ item.attachment_count }}</span>
-            </div>
-          </div>
-          <div class="container-item-actions">
-            <button class="icon-btn" @click="onItemEdit(item)">✎</button>
-            <button class="icon-btn danger" @click="onItemDelete(item)">×</button>
-          </div>
-        </article>
-      </div>
-      <div v-else class="container-detail-empty"><h3>这个箱子还没有物品</h3></div>
-    </div>
-  </div>
+  <ContainerDetailModal :container-id="openContainerId" @close="closeContainerDetail" />
 </template>

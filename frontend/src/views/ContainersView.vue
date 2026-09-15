@@ -6,6 +6,7 @@ import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
+import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import type { Container } from '../types'
 
 const store = useAppStore()
@@ -18,6 +19,10 @@ function openCoverPreview(id: number | null | undefined) {
   if (!id) return
   preview.open([attachmentUrl(id)])
 }
+
+const openContainerId = ref<number | null>(null)
+function openContainerDetail(id: number) { openContainerId.value = id }
+function closeContainerDetail() { openContainerId.value = null }
 
 const filteredContainers = computed(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
 const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
@@ -56,8 +61,6 @@ async function saveSort() {
     toast('顺序已保存')
   } catch (error) { toast((error as Error).message) }
 }
-
-function onItemSaved() { return refreshData() }
 </script>
 
 <template>
@@ -85,7 +88,7 @@ function onItemSaved() { return refreshData() }
         :key="item.id"
         class="container-card"
         :class="{ 'sort-editing': editingSort }"
-        @click="editingSort ? undefined : modals.openHistory(item)">
+        @click="editingSort ? undefined : openContainerDetail(item.id)">
         <div v-if="editingSort" class="sort-controls">
           <button class="icon-btn sort-btn" :disabled="index === 0" @click.stop="moveSort(index, -1)">↑</button>
           <button class="icon-btn sort-btn" :disabled="index === displayContainers.length - 1" @click.stop="moveSort(index, 1)">↓</button>
@@ -99,7 +102,7 @@ function onItemSaved() { return refreshData() }
         <div class="item-names">{{ item.item_names || '' }}</div>
         <p>{{ item.notes || '空备注' }}</p>
         <div class="container-bottom">
-          <button class="open-btn" @click.stop="modals.openHistory(item)">记录</button>
+          <button class="open-btn" @click.stop="openContainerDetail(item.id)">打开</button>
         </div>
       </article>
     </div>
@@ -109,4 +112,6 @@ function onItemSaved() { return refreshData() }
       <button class="primary-btn" @click="modals.openAddContainer">＋ 新建箱子</button>
     </div>
   </div>
+
+  <ContainerDetailModal :container-id="openContainerId" @close="closeContainerDetail" />
 </template>
