@@ -116,7 +116,7 @@ function formatTime(value?: string | null) {
       </div>
       <form class="modal-form one-col" @submit.prevent="modals.saveContainer(onContainerSaved)">
         <label>归属
-          <select v-model.number="modals.containerForm.owner_id">
+          <select v-model.number="modals.containerForm.owner_id" @change="modals.containerForm.group_id = null">
             <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
         </label>
