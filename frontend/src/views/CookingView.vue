@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api, attachmentUrl } from '../api'
 import { useToast } from '../composables/useToast'
 import { useImagePreview } from '../composables/useImagePreview'
@@ -110,6 +110,7 @@ async function deleteAttachment(a: Attachment) {
 
 watch(() => detailId.value, (id) => { document.body.classList.toggle('modal-open', id != null) })
 onBeforeUnmount(() => document.body.classList.remove('modal-open'))
+onMounted(load)
 </script>
 
 <template>
