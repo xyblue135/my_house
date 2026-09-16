@@ -7,6 +7,7 @@ import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
+import AiAssistantPanel from '../components/AiAssistantPanel.vue'
 import { daysLeftShort, daysLeft } from '../utils/expiry'
 import type { Container, Item } from '../types'
 
@@ -199,4 +200,6 @@ async function saveSort() {
   </div>
 
   <ContainerDetailModal :container-id="openContainerId" @close="closeContainerDetail" />
+
+  <AiAssistantPanel />
 </template>
