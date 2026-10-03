@@ -61,6 +61,7 @@ export function useAppBootstrap() {
   async function refreshData() { await loadAll() }
 
   function onKeydown(event: KeyboardEvent) {
+    if (document.querySelector('[aria-modal="true"]')) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault()
       router.push({ name: 'containers' }).then(() => {

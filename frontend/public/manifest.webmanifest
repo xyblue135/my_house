@@ -1,11 +1,11 @@
 {
-  "name": "物栈 ItemNest Life OS",
+  "name": "物栈 ItemNest",
   "short_name": "物栈",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#171e31",
-  "description": "本地优先的物品、备忘、待办、记账与生活管理中心",
+  "background_color": "#f6f7f2",
+  "theme_color": "#27614d",
+  "description": "与家人一起管理物品、账单和菜谱",
   "categories": ["productivity", "lifestyle", "finance"],
   "icons": [
     {"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png"},

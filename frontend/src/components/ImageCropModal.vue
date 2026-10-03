@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="modal-backdrop crop-backdrop" @click.self="emit('cancel')">
+  <div v-dialog="() => emit('cancel')" aria-label="裁剪图片" class="modal-backdrop crop-backdrop" @click.self="emit('cancel')">
     <div class="modal crop-modal">
       <div class="modal-head">
         <div><p class="eyebrow">CROP</p><h3>裁剪图片</h3></div>

@@ -1,0 +1,89 @@
+<script setup lang="ts">
+import {
+  Package,
+  House,
+  Wallet,
+  CookingPot,
+  Settings,
+  Plus,
+  Search,
+  X,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  ArrowUp,
+  ArrowDown,
+  Trash2,
+  Pencil,
+  Image,
+  Camera,
+  Paperclip,
+  Clock,
+  Check,
+  Folder,
+  ArrowUpDown,
+  Sparkles,
+  Send,
+  Users,
+  Server,
+  KeyRound,
+  ShieldCheck,
+  RefreshCw,
+  Download,
+  BookOpen,
+  LayoutGrid,
+  CircleHelp,
+  Wifi,
+  Receipt,
+  CalendarDays,
+} from '@lucide/vue'
+const icons = {
+  box: Package,
+  home: House,
+  wallet: Wallet,
+  cooking: CookingPot,
+  settings: Settings,
+  plus: Plus,
+  search: Search,
+  close: X,
+  down: ChevronDown,
+  right: ChevronRight,
+  left: ChevronLeft,
+  up: ArrowUp,
+  lower: ArrowDown,
+  trash: Trash2,
+  edit: Pencil,
+  image: Image,
+  camera: Camera,
+  attachment: Paperclip,
+  clock: Clock,
+  check: Check,
+  folder: Folder,
+  sort: ArrowUpDown,
+  sparkles: Sparkles,
+  send: Send,
+  users: Users,
+  server: Server,
+  key: KeyRound,
+  shield: ShieldCheck,
+  refresh: RefreshCw,
+  download: Download,
+  book: BookOpen,
+  grid: LayoutGrid,
+  help: CircleHelp,
+  wifi: Wifi,
+  receipt: Receipt,
+  calendar: CalendarDays,
+}
+withDefaults(defineProps<{ name: keyof typeof icons; size?: number }>(), { size: 20 })
+</script>
+
+<template>
+  <component
+    :is="icons[name]"
+    :size="size"
+    :stroke-width="1.8"
+    aria-hidden="true"
+    class="app-icon"
+  />
+</template>

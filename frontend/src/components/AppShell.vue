@@ -1,36 +1,39 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
+import AppIcon from './AppIcon.vue'
 
 const router = useRouter()
 const route = useRoute()
 
-interface NavItem { name: string; label: string; icon: string }
-const navItems: NavItem[] = [
-  { name: 'containers', label: '箱子',     icon: '▦' },
-  { name: 'billing',    label: '账单中心', icon: '¥' },
-  { name: 'cooking',    label: '炒菜中心', icon: '食' },
-  { name: 'settings',   label: '设置',     icon: '✱' },
-]
+const navItems = [
+  { name: 'containers', label: '物品', icon: 'box' },
+  { name: 'billing', label: '账单', icon: 'wallet' },
+  { name: 'cooking', label: '菜谱', icon: 'cooking' },
+  { name: 'settings', label: '设置', icon: 'settings' },
+] as const
 const current = computed(() => route.name as string)
 </script>
 
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">IN</div>
-      <div class="brand-name">ItemNest</div>
+      <div class="brand-mark"><AppIcon name="box" :size="24" /></div>
+      <div class="brand-name">物栈 <small>ITEMNEST</small></div>
     </div>
-    <nav class="nav-list">
+    <nav class="nav-list" aria-label="主导航">
       <button
         v-for="item in navItems"
         :key="item.name"
         class="nav-btn"
         :class="{ active: current === item.name }"
-        @click="router.push({ name: item.name })">
-        <span>{{ item.icon }}</span>
+        :aria-current="current === item.name ? 'page' : undefined"
+        @click="router.push({ name: item.name })"
+      >
+        <AppIcon :name="item.icon" :size="22" />
         <em>{{ item.label }}</em>
       </button>
     </nav>
+    <div class="sidebar-foot"><AppIcon name="home" :size="18" /><span>一起照顾好日常</span></div>
   </aside>
 </template>

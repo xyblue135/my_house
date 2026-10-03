@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from './AppIcon.vue'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useAppStore } from '../store'
@@ -14,45 +15,84 @@ const store = useAppStore()
 const preview = useImagePreview()
 
 function previewAttachments(attachments: Attachment[], currentId: number) {
-  const images = attachments.filter(a => a.kind === 'image')
-  const urls = images.map(a => attachmentUrl(a.id))
-  const startIndex = images.findIndex(a => a.id === currentId)
+  const images = attachments.filter((a) => a.kind === 'image')
+  const urls = images.map((a) => attachmentUrl(a.id))
+  const startIndex = images.findIndex((a) => a.id === currentId)
   preview.open(urls, Math.max(0, startIndex))
 }
 
-function onItemSaved() { return refreshData() }
-function onContainerSaved() { return refreshData() }
-function onContainerDeleted() { return refreshData() }
-function onHistorySaved() { return refreshData() }
+function onItemSaved() {
+  return refreshData()
+}
+function onContainerSaved() {
+  return refreshData()
+}
+function onContainerDeleted() {
+  return refreshData()
+}
+function onHistorySaved() {
+  return refreshData()
+}
 
 // 箱子表单里「分组」下拉：跟随当前选择的归属成员
-const currentGroups = computed(() => store.groups.filter(g => g.owner_id === modals.containerForm.owner_id))
+const currentGroups = computed(() =>
+  store.groups.filter((g) => g.owner_id === modals.containerForm.owner_id),
+)
 
 function formatTime(value?: string | null) {
   if (!value) return ''
-  return value.replace('T', ' ').replace(/\.\d+$/, '').slice(0, 16)
+  return value
+    .replace('T', ' ')
+    .replace(/\.\d+$/, '')
+    .slice(0, 16)
 }
 </script>
 
 <template>
   <!-- Item modal -->
-  <div v-if="modals.itemModalOpen" class="modal-backdrop" @click.self="modals.itemModalOpen = false">
+  <div
+    v-if="modals.itemModalOpen"
+    v-dialog="() => (modals.itemModalOpen = false)"
+    aria-label="物品表单"
+    class="modal-backdrop"
+    @click.self="modals.itemModalOpen = false"
+  >
     <div class="modal wide">
       <div class="modal-head">
-        <div><p class="eyebrow">ITEM</p><h3>{{ modals.itemEditingId ? '编辑物品' : '添加物品' }}</h3></div>
-        <button class="icon-btn" @click="modals.itemModalOpen = false">×</button>
+        <div>
+          <p class="eyebrow">收进家里</p>
+          <h3>{{ modals.itemEditingId ? '编辑物品' : '添加物品' }}</h3>
+        </div>
+        <button
+          class="icon-btn plain"
+          aria-label="关闭物品表单"
+          @click="modals.itemModalOpen = false"
+        >
+          <AppIcon name="close" />
+        </button>
       </div>
       <form class="modal-form" @submit.prevent="modals.saveItem(onItemSaved)">
-        <label class="span-2">物品名称
-          <textarea v-model="modals.itemForm.name" rows="2" required placeholder="单个名称，或每行一个名称批量添加"></textarea>
+        <label class="span-2"
+          >物品名称
+          <textarea
+            v-model="modals.itemForm.name"
+            rows="2"
+            required
+            placeholder="单个名称，或每行一个名称批量添加"
+          ></textarea>
           <span class="muted">可每行输入一个名称，一次添加多个属性一致的物品</span>
         </label>
-        <label>所在箱子
+        <label
+          >所在箱子
           <select v-model.number="modals.itemForm.container_id" required>
-            <option v-for="c in store.containers" :key="c.id" :value="c.id">{{ c.owner_name }} / {{ c.name }}</option>
+            <option v-for="c in store.containers" :key="c.id" :value="c.id">
+              {{ c.owner_name }} / {{ c.name }}
+            </option>
           </select>
         </label>
-        <label>数量<input v-model="modals.itemForm.quantity" type="number" min="0" /></label>
+        <label
+          >数量<input v-model="modals.itemForm.quantity" type="number" inputmode="numeric" min="0"
+        /></label>
         <div class="span-2 option-panel">
           <label class="switch-line">
             <input v-model="modals.itemForm.expiry_enabled" type="checkbox" />
@@ -60,7 +100,8 @@ function formatTime(value?: string | null) {
             <span>食品、药品等有保质期的东西</span>
           </label>
           <div v-if="modals.itemForm.expiry_enabled" class="life-form">
-            <label class="span-2">计算方式
+            <label class="span-2"
+              >计算方式
               <select v-model="modals.itemForm.expiry_mode">
                 <option value="days">生产时间 + 天数自动算</option>
                 <option value="date">直接填截止日期</option>
@@ -68,18 +109,39 @@ function formatTime(value?: string | null) {
             </label>
             <template v-if="modals.itemForm.expiry_mode === 'days'">
               <label>生产时间<input v-model="modals.itemForm.start_date" type="date" /></label>
-              <label>有效天数<input v-model="modals.itemForm.valid_days" type="number" min="1" /></label>
+              <label
+                >有效天数<input v-model="modals.itemForm.valid_days" type="number" min="1"
+              /></label>
             </template>
-            <label v-else>截止日期<input v-model="modals.itemForm.expiry_date" type="date" /></label>
+            <label v-else
+              >截止日期<input v-model="modals.itemForm.expiry_date" type="date"
+            /></label>
           </div>
         </div>
         <div class="span-2 option-panel">
           <b>图片与附件（可选）</b>
-          <p class="muted">手机拍照会自动压缩到几百 KB。附件保存在本地，不会发送给大语言模型。</p>
+          <p class="muted">照片会自动压缩，统一保存在家庭服务器，不发送给 AI。</p>
           <div class="upload-actions">
-            <label class="upload-btn">📷 拍照<input type="file" accept="image/*" capture="environment" @change="modals.onFiles" /></label>
-            <label class="upload-btn">🖼 选图<input type="file" accept="image/*" multiple @change="modals.onFiles" /></label>
-            <label class="upload-btn">📎 文件<input type="file" multiple @change="modals.onFiles" /></label>
+            <label class="upload-btn"
+              ><AppIcon name="camera" :size="18" />拍照<input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                @change="modals.onFiles"
+            /></label>
+            <label class="upload-btn"
+              ><AppIcon name="image" :size="18" />选图<input
+                type="file"
+                accept="image/*"
+                multiple
+                @change="modals.onFiles"
+            /></label>
+            <label class="upload-btn"
+              ><AppIcon name="attachment" :size="18" />文件<input
+                type="file"
+                multiple
+                @change="modals.onFiles"
+            /></label>
           </div>
           <div v-if="modals.pendingPreviews.length" class="preview-grid">
             <figure v-for="(url, i) in modals.pendingPreviews" :key="i" class="preview-item">
@@ -89,15 +151,23 @@ function formatTime(value?: string | null) {
           </div>
           <div v-if="modals.itemAttachments.length" class="attachment-list">
             <div v-for="a in modals.itemAttachments" :key="a.id" class="attachment-row">
-              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" @click.stop="previewAttachments(modals.itemAttachments, a.id)" />
-              <span v-else class="attachment-file">📎</span>
+              <img
+                v-if="a.kind === 'image'"
+                class="attachment-thumb"
+                :src="attachmentUrl(a.id)"
+                alt=""
+                @click.stop="previewAttachments(modals.itemAttachments, a.id)"
+              />
+              <span v-else class="attachment-file"><AppIcon name="attachment" /></span>
               <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteAttachment(a)">删除</button>
             </div>
           </div>
         </div>
         <div class="modal-actions span-2">
-          <button type="button" class="outline-btn" @click="modals.itemModalOpen = false">取消</button>
+          <button type="button" class="outline-btn" @click="modals.itemModalOpen = false">
+            取消
+          </button>
           <button class="primary-btn">保存</button>
         </div>
       </form>
@@ -105,31 +175,66 @@ function formatTime(value?: string | null) {
   </div>
 
   <!-- Container modal -->
-  <div v-if="modals.containerModalOpen" class="modal-backdrop" @click.self="modals.containerModalOpen = false">
+  <div
+    v-if="modals.containerModalOpen"
+    v-dialog="() => (modals.containerModalOpen = false)"
+    aria-label="箱子表单"
+    class="modal-backdrop"
+    @click.self="modals.containerModalOpen = false"
+  >
     <div class="modal small">
-      <div class="modal-head"><h3>{{ modals.containerEditingId ? '编辑箱子' : '新建箱子' }}</h3>
-        <button class="icon-btn" @click="modals.containerModalOpen = false">×</button>
+      <div class="modal-head">
+        <h3>{{ modals.containerEditingId ? '编辑箱子' : '新建箱子' }}</h3>
+        <button
+          class="icon-btn plain"
+          aria-label="关闭箱子表单"
+          @click="modals.containerModalOpen = false"
+        >
+          <AppIcon name="close" />
+        </button>
       </div>
       <form class="modal-form one-col" @submit.prevent="modals.saveContainer(onContainerSaved)">
-        <label>归属
-          <select v-model.number="modals.containerForm.owner_id" @change="modals.containerForm.group_id = null">
+        <label
+          >归属
+          <select
+            v-model.number="modals.containerForm.owner_id"
+            @change="modals.containerForm.group_id = null"
+          >
             <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
         </label>
-        <label>分组
+        <label
+          >分组
           <select v-model="modals.containerForm.group_id">
-            <option :value="null">默认分组</option>
+            <option :value="null">未分组</option>
             <option v-for="g in currentGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
           </select>
         </label>
-        <label>名称<input v-model="modals.containerForm.name" required /></label>
+        <label
+          >名称<input
+            v-model="modals.containerForm.name"
+            required
+            placeholder="如：书房抽屉、工具箱"
+        /></label>
         <label>备注<textarea v-model="modals.containerForm.notes" rows="2"></textarea></label>
         <div class="option-panel">
           <b>箱子照片（可选）</b>
           <p class="muted">拍一张箱子外观，方便一眼认出。手机拍照会自动压缩。</p>
           <div class="upload-actions">
-            <label class="upload-btn">📷 拍照<input type="file" accept="image/*" capture="environment" @change="modals.onContainerFiles" /></label>
-            <label class="upload-btn">🖼 选图<input type="file" accept="image/*" multiple @change="modals.onContainerFiles" /></label>
+            <label class="upload-btn"
+              ><AppIcon name="camera" :size="18" />拍照<input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                @change="modals.onContainerFiles"
+            /></label>
+            <label class="upload-btn"
+              ><AppIcon name="image" :size="18" />选图<input
+                type="file"
+                accept="image/*"
+                multiple
+                @change="modals.onContainerFiles"
+            /></label>
           </div>
           <div v-if="modals.containerPreviews.length" class="preview-grid">
             <figure v-for="(url, i) in modals.containerPreviews" :key="i" class="preview-item">
@@ -138,17 +243,32 @@ function formatTime(value?: string | null) {
           </div>
           <div v-if="modals.containerAttachments.length" class="attachment-list">
             <div v-for="a in modals.containerAttachments" :key="a.id" class="attachment-row">
-              <img v-if="a.kind === 'image'" class="attachment-thumb" :src="attachmentUrl(a.id)" alt="" @click.stop="previewAttachments(modals.containerAttachments, a.id)" />
-              <span v-else class="attachment-file">📎</span>
+              <img
+                v-if="a.kind === 'image'"
+                class="attachment-thumb"
+                :src="attachmentUrl(a.id)"
+                alt=""
+                @click.stop="previewAttachments(modals.containerAttachments, a.id)"
+              />
+              <span v-else class="attachment-file"><AppIcon name="attachment" /></span>
               <a :href="attachmentUrl(a.id)" target="_blank">{{ a.filename }}</a>
               <button type="button" @click="modals.deleteContainerAttachment(a)">删除</button>
             </div>
           </div>
         </div>
         <div class="modal-actions">
-          <button v-if="modals.containerEditingId" type="button" class="outline-btn danger-outline" @click="modals.deleteContainer(onContainerSaved, onContainerDeleted)">删除空箱子</button>
+          <button
+            v-if="modals.containerEditingId"
+            type="button"
+            class="outline-btn danger-outline"
+            @click="modals.deleteContainer(onContainerSaved, onContainerDeleted)"
+          >
+            删除空箱子
+          </button>
           <span class="grow"></span>
-          <button type="button" class="outline-btn" @click="modals.containerModalOpen = false">取消</button>
+          <button type="button" class="outline-btn" @click="modals.containerModalOpen = false">
+            取消
+          </button>
           <button class="primary-btn">{{ modals.containerEditingId ? '保存' : '创建' }}</button>
         </div>
       </form>
@@ -156,17 +276,42 @@ function formatTime(value?: string | null) {
   </div>
 
   <!-- History modal -->
-  <div v-if="modals.historyModalOpen" class="modal-backdrop" @click.self="modals.historyModalOpen = false">
+  <div
+    v-if="modals.historyModalOpen"
+    v-dialog="() => (modals.historyModalOpen = false)"
+    aria-label="操作记录"
+    class="modal-backdrop"
+    @click.self="modals.historyModalOpen = false"
+  >
     <div class="modal history-modal">
-      <div class="modal-head"><div><p class="eyebrow">HISTORY</p><h3>{{ modals.historyContainerName }} · 操作记录</h3></div>
-        <button class="icon-btn" @click="modals.historyModalOpen = false">×</button>
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">每一次整理都有记录</p>
+          <h3>{{ modals.historyContainerName }} · 操作记录</h3>
+        </div>
+        <button
+          class="icon-btn plain"
+          aria-label="关闭操作记录"
+          @click="modals.historyModalOpen = false"
+        >
+          <AppIcon name="close" />
+        </button>
       </div>
       <div class="history-list">
         <article v-for="h in modals.containerHistory" :key="h.id">
-          <div><b>{{ h.description }}</b><span>{{ h.source }} · {{ formatTime(h.created_at) }}</span></div>
+          <div>
+            <b>{{ h.description }}</b
+            ><span>{{ h.source }} · {{ formatTime(h.created_at) }}</span>
+          </div>
           <div class="inline-actions">
             <span v-if="h.undone_at" class="undo-state">已撤销</span>
-            <button v-else-if="h.can_undo" class="text-btn" @click="modals.undoHistory(h, onHistorySaved)">撤销</button>
+            <button
+              v-else-if="h.can_undo"
+              class="text-btn"
+              @click="modals.undoHistory(h, onHistorySaved)"
+            >
+              撤销
+            </button>
           </div>
         </article>
         <div v-if="!modals.containerHistory.length" class="empty">暂无操作记录</div>
@@ -180,5 +325,6 @@ function formatTime(value?: string | null) {
     :file="modals.cropFile"
     @confirm="modals.onCropConfirm"
     @skip="modals.onCropSkip"
-    @cancel="modals.onCropCancel" />
+    @cancel="modals.onCropCancel"
+  />
 </template>

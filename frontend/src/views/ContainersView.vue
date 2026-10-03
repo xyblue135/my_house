@@ -1,86 +1,142 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
-import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
-import { daysLeftShort, daysLeft } from '../utils/expiry'
+import AppIcon from '../components/AppIcon.vue'
+import { daysLeft, daysLeftText } from '../utils/expiry'
 import type { Container, Item } from '../types'
 
 const store = useAppStore()
 const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
-const preview = useImagePreview()
 const { toast } = useToast()
-
-function openCoverPreview(id: number | null | undefined) {
-  if (!id) return
-  preview.open([attachmentUrl(id)])
-}
-
 const openContainerId = ref<number | null>(null)
-function openContainerDetail(id: number) { openContainerId.value = id }
-function closeContainerDetail() { openContainerId.value = null }
-
-// 分组筛选：null = 默认分组（未分组），number = 具体分组
-const activeGroupId = ref<number | null>(null)
-const myGroups = computed(() => store.groups.filter(g => g.owner_id === store.selectedOwnerId))
-const filteredContainers = computed(() => store.containers.filter(c => {
-  if (c.owner_id !== store.selectedOwnerId) return false
-  return activeGroupId.value === null ? (c.group_id == null) : c.group_id === activeGroupId.value
-}))
-const selectedMember = computed(() => store.members.find(m => m.id === store.selectedOwnerId))
-// 切换成员时回到默认分组视图
-watch(() => store.selectedOwnerId, () => { activeGroupId.value = null })
-
-function setGroup(id: number | null) { activeGroupId.value = id }
-async function addGroup() {
-  const name = window.prompt('新分组名称（如：房间A）')
-  if (!name || !name.trim()) return
-  try {
-    await api('/api/groups', { method: 'POST', body: JSON.stringify({ owner_id: store.selectedOwnerId, name: name.trim() }) })
-    await refreshData()
-    toast('分组已新建')
-  } catch (error) { toast((error as Error).message) }
-}
-async function deleteGroup(groupId: number) {
-  const g = myGroups.value.find(x => x.id === groupId)
-  if (!g || !window.confirm(`删除分组「${g.name}」？其下盒子会回到默认分组。`)) return
-  try {
-    await api(`/api/groups/${groupId}`, { method: 'DELETE' })
-    if (activeGroupId.value === groupId) activeGroupId.value = null
-    await refreshData()
-    toast('分组已删除')
-  } catch (error) { toast((error as Error).message) }
-}
-function openAddContainer() {
-  modals.openAddContainer(activeGroupId.value)
-}
-
-// 按箱子聚合物品，正序，供卡片渲染可点击的小框
-const itemsByContainer = computed(() => {
-  const map = new Map<number, Item[]>()
-  for (const it of store.items) {
-    const arr = map.get(it.container_id) ?? []
-    arr.push(it)
-    map.set(it.container_id, arr)
-  }
-  for (const arr of map.values()) arr.sort((a, b) => a.id - b.id)
-  return map
-})
-function itemsInContainer(containerId: number): Item[] { return itemsByContainer.value.get(containerId) ?? [] }
-function onItemEdit(item: Item) { modals.openEditItem(item) }
-function itemExpired(item: Item): boolean { const n = daysLeft(item.expiry_date); return n != null && n < 0 }
-
-// 编辑排序模式：进入后卡片显示上移/下移，点保存调 reorder API
+const activeGroupId = ref<number | 'all' | 'ungrouped'>('all')
+const query = ref('')
+const searchResults = ref<Item[]>([])
+const searching = ref(false)
+const searchError = ref('')
+const groupModal = ref(false)
+const groupName = ref('')
+const savingGroup = ref(false)
 const editingSort = ref(false)
 const sortList = ref<Container[]>([])
-const displayContainers = computed(() => editingSort.value ? sortList.value : filteredContainers.value)
+const dragIndex = ref<number | null>(null)
+const savingSort = ref(false)
 
+const ownerContainers = computed(() =>
+  store.containers.filter((c) => c.owner_id === store.selectedOwnerId),
+)
+const myGroups = computed(() => store.groups.filter((g) => g.owner_id === store.selectedOwnerId))
+const selectedMember = computed(() => store.members.find((m) => m.id === store.selectedOwnerId))
+const totalItems = computed(() => ownerContainers.value.reduce((sum, c) => sum + c.item_count, 0))
+const filteredContainers = computed(() =>
+  ownerContainers.value.filter(
+    (c) =>
+      activeGroupId.value === 'all' ||
+      (activeGroupId.value === 'ungrouped'
+        ? c.group_id == null
+        : c.group_id === activeGroupId.value),
+  ),
+)
+const displayContainers = computed(() =>
+  editingSort.value ? sortList.value : filteredContainers.value,
+)
+const matchingContainers = computed(() =>
+  ownerContainers.value.filter((c) =>
+    (c.name + ' ' + (c.notes || ''))
+      .toLocaleLowerCase()
+      .includes(query.value.trim().toLocaleLowerCase()),
+  ),
+)
+const activeGroup = computed(() => myGroups.value.find((g) => g.id === activeGroupId.value))
+watch(
+  () => store.selectedOwnerId,
+  () => {
+    activeGroupId.value = 'all'
+    cancelSort()
+  },
+)
+watch(activeGroupId, cancelSort)
+watch(query, cancelSort)
+
+// Query the server, so search also finds items beyond the initial inventory page.
+watch([query, () => store.selectedOwnerId, () => store.items], ([value], _, onCleanup) => {
+  const keyword = value.trim()
+  searchResults.value = []
+  searchError.value = ''
+  searching.value = !!keyword
+  if (!keyword) return
+  const controller = new AbortController()
+  const timer = window.setTimeout(async () => {
+    try {
+      const result = await api<Item[]>(
+        '/api/items?q=' + encodeURIComponent(keyword) + '&owner_id=' + store.selectedOwnerId,
+        { signal: controller.signal },
+      )
+      if (!controller.signal.aborted) searchResults.value = result
+    } catch (error) {
+      if (!controller.signal.aborted) searchError.value = (error as Error).message
+    } finally {
+      if (!controller.signal.aborted) searching.value = false
+    }
+  }, 220)
+  onCleanup(() => {
+    clearTimeout(timer)
+    controller.abort()
+  })
+})
+
+function selectOwner(event: Event) {
+  store.setOwner(Number((event.target as HTMLSelectElement).value))
+}
+function openAddContainer() {
+  modals.openAddContainer(typeof activeGroupId.value === 'number' ? activeGroupId.value : null)
+}
+function openAddItem() {
+  if (!ownerContainers.value.length) {
+    openAddContainer()
+    toast('先创建一个箱子，再放入物品')
+    return
+  }
+  modals.openAddItem(ownerContainers.value[0].id)
+}
+async function addGroup() {
+  const name = groupName.value.trim()
+  if (!name || savingGroup.value) return
+  savingGroup.value = true
+  try {
+    await api('/api/groups', {
+      method: 'POST',
+      body: JSON.stringify({ owner_id: store.selectedOwnerId, name }),
+    })
+    await refreshData()
+    groupName.value = ''
+    groupModal.value = false
+    toast('分组已新建')
+  } catch (error) {
+    toast((error as Error).message)
+  } finally {
+    savingGroup.value = false
+  }
+}
+async function deleteGroup() {
+  const g = activeGroup.value
+  if (!g || !window.confirm('删除分组「' + g.name + '」？箱子会保留并回到未分组。')) return
+  try {
+    await api('/api/groups/' + g.id, { method: 'DELETE' })
+    activeGroupId.value = 'all'
+    await refreshData()
+    toast('分组已删除')
+  } catch (error) {
+    toast((error as Error).message)
+  }
+}
 function enterSortMode() {
   sortList.value = [...filteredContainers.value]
   editingSort.value = true
@@ -97,109 +153,328 @@ function moveSort(index: number, delta: number) {
   arr.splice(target, 0, item)
   sortList.value = arr
 }
-// 拖拽排序（桌面端）：拖到目标卡片上即插入到该位置
-const dragIndex = ref<number | null>(null)
 function onDragStart(index: number, event: DragEvent) {
   dragIndex.value = index
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
-    try { event.dataTransfer.setData('text/plain', String(index)) } catch { /* ignore */ }
+    event.dataTransfer.setData('text/plain', String(index))
   }
 }
 function onDragOver(event: DragEvent, index: number) {
+  if (!editingSort.value) return
   event.preventDefault()
   if (dragIndex.value == null || dragIndex.value === index) return
-  const from = dragIndex.value
   const arr = [...sortList.value]
-  const [item] = arr.splice(from, 1)
+  const [item] = arr.splice(dragIndex.value, 1)
   arr.splice(index, 0, item)
   sortList.value = arr
   dragIndex.value = index
 }
-function onDragEnd() { dragIndex.value = null }
 async function saveSort() {
-  const ids = sortList.value.map(c => c.id)
+  if (savingSort.value) return
+  savingSort.value = true
   try {
+    // Keep boxes outside the selected group in their original positions.
+    const reordered = [...sortList.value]
+    const selectedIds = new Set(reordered.map((c) => c.id))
+    const ids = ownerContainers.value.map((c) =>
+      selectedIds.has(c.id) ? reordered.shift()!.id : c.id,
+    )
     await api('/api/containers/reorder', {
       method: 'POST',
       body: JSON.stringify({ owner_id: store.selectedOwnerId, ids }),
     })
-    editingSort.value = false
-    sortList.value = []
+    cancelSort()
     await refreshData()
     toast('顺序已保存')
-  } catch (error) { toast((error as Error).message) }
+  } catch (error) {
+    toast((error as Error).message)
+  } finally {
+    savingSort.value = false
+  }
 }
+function expired(item: Item) {
+  const days = daysLeft(item.expiry_date)
+  return days != null && days < 0
+}
+onDeactivated(() => {
+  openContainerId.value = null
+  groupModal.value = false
+})
+onBeforeUnmount(() => {
+  openContainerId.value = null
+})
 </script>
 
 <template>
-  <div class="view active">
-    <div class="section-head row-mobile">
+  <section class="inventory-view view active">
+    <div class="page-heading">
       <div>
-        <h3>{{ selectedMember?.name }}的箱子管理</h3>
-        <p>用分组（如房间A / 房间B）区分盒子的位置，默认显示「默认」分组。</p>
+        <p class="eyebrow">收好每一份日常</p>
+        <h1>家里的物品</h1>
+        <p class="page-description">
+          {{ ownerContainers.length }} 个箱子，{{ totalItems }} 种物品，都有迹可寻。
+        </p>
       </div>
-      <div class="inline-actions">
-        <template v-if="editingSort">
-          <button class="primary-btn" @click="saveSort">保存顺序</button>
-          <button class="outline-btn" @click="cancelSort">取消</button>
-        </template>
-        <template v-else>
-          <button class="outline-btn" @click="enterSortMode">编辑排序</button>
-          <button class="primary-btn" @click="openAddContainer">＋ 新建箱子</button>
-        </template>
+      <label class="member-select"
+        ><AppIcon name="users" :size="17" /><select
+          :value="store.selectedOwnerId"
+          aria-label="查看成员"
+          @change="selectOwner"
+        >
+          <option v-for="member in store.members" :key="member.id" :value="member.id">
+            {{ member.name }}
+          </option>
+        </select></label
+      >
+    </div>
+
+    <div class="inventory-tools">
+      <div class="search-box">
+        <AppIcon name="search" :size="21" />
+        <input
+          v-model="query"
+          type="search"
+          maxlength="200"
+          placeholder="找物品、箱子…"
+          aria-label="搜索物品或箱子"
+        />
+        <button v-if="query" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
+          <AppIcon name="close" :size="18" />
+        </button>
+        <kbd v-else>⌘ / Ctrl K</kbd>
+      </div>
+      <div class="quick-actions">
+        <button class="primary-btn" @click="openAddItem"><AppIcon name="plus" />添加物品</button>
+        <button class="outline-btn" @click="openAddContainer">
+          <AppIcon name="box" />新建箱子
+        </button>
       </div>
     </div>
-    <div class="group-tabs">
-      <button class="group-tab" :class="{ active: activeGroupId === null }" @click="setGroup(null)">默认</button>
-      <button v-for="g in myGroups" :key="g.id" class="group-tab" :class="{ active: activeGroupId === g.id }" @click="setGroup(g.id)">
-        {{ g.name }}
-        <span class="group-del" title="删除分组" @click.stop="deleteGroup(g.id)">×</span>
-      </button>
-      <button class="group-add" @click="addGroup">＋ 分组</button>
-    </div>
-    <div v-if="displayContainers.length" class="containers-grid">
-      <article
-        v-for="(item, index) in displayContainers"
-        :key="item.id"
-        class="container-card"
-        :class="{ 'sort-editing': editingSort, dragging: dragIndex === index }"
-        :draggable="editingSort"
-        @dragstart="onDragStart(index, $event)"
-        @dragover="onDragOver($event, index)"
-        @drop.prevent
-        @dragend="onDragEnd"
-        @click="editingSort ? undefined : openContainerDetail(item.id)">
-        <div v-if="editingSort" class="sort-controls">
-          <button class="icon-btn sort-btn" :disabled="index === 0" @click.stop="moveSort(index, -1)">↑</button>
-          <button class="icon-btn sort-btn" :disabled="index === displayContainers.length - 1" @click.stop="moveSort(index, 1)">↓</button>
+
+    <template v-if="query.trim()">
+      <div class="section-head">
+        <div>
+          <h2>搜索结果</h2>
+          <p>范围：{{ selectedMember?.name }} 的物品和箱子</p>
         </div>
-        <div class="container-cover">
-          <img v-if="item.cover_attachment_id" :src="attachmentUrl(item.cover_attachment_id)" alt="" loading="lazy" @click.stop="openCoverPreview(item.cover_attachment_id)" />
-          <div v-else class="container-cover-empty">▦</div>
-          <span class="owner-badge">{{ item.owner_name }}</span>
+      </div>
+      <p v-if="searching" class="inline-notice" role="status">正在查找…</p>
+      <p v-else-if="searchError" class="inline-notice error" role="alert">{{ searchError }}</p>
+      <div v-else-if="searchResults.length" class="search-results">
+        <button
+          v-for="item in searchResults"
+          :key="item.id"
+          class="search-result"
+          @click="modals.openEditItem(item)"
+        >
+          <span class="item-thumbnail"
+            ><img
+              v-if="item.cover_attachment_id"
+              :src="attachmentUrl(item.cover_attachment_id)"
+              alt="" /><AppIcon v-else name="box" :size="24"
+          /></span>
+          <span class="result-copy"
+            ><strong>{{ item.name }}</strong
+            ><span
+              >{{ item.container_name
+              }}<template v-if="item.quantity != null"> · {{ item.quantity }} 个</template></span
+            ><small v-if="item.expiry_date" :class="{ 'expired-text': expired(item) }">{{
+              daysLeftText(item.expiry_date)
+            }}</small></span
+          >
+          <AppIcon name="right" :size="18" />
+        </button>
+        <p v-if="searchResults.length >= 200" class="muted">
+          结果较多，请输入更具体的名称缩小范围。
+        </p>
+      </div>
+      <div v-if="matchingContainers.length" class="search-box-matches">
+        <h3>相关箱子</h3>
+        <button
+          v-for="container in matchingContainers"
+          :key="container.id"
+          class="search-result"
+          @click="openContainerId = container.id"
+        >
+          <AppIcon name="folder" /><span class="result-copy"
+            ><strong>{{ container.name }}</strong
+            ><span>{{ container.item_count }} 种物品</span></span
+          ><AppIcon name="right" :size="18" />
+        </button>
+      </div>
+      <div
+        v-if="!searching && !searchError && !searchResults.length && !matchingContainers.length"
+        class="empty"
+      >
+        <AppIcon name="search" :size="36" />
+        <h3>还没找到这件东西</h3>
+        <p>试试更短的名称，或切换其他成员。</p>
+        <button class="outline-btn" @click="query = ''">返回所有箱子</button>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="group-tabs" aria-label="按分组筛选">
+        <button
+          class="group-tab"
+          :class="{ active: activeGroupId === 'all' }"
+          :aria-pressed="activeGroupId === 'all'"
+          @click="activeGroupId = 'all'"
+        >
+          全部<span>{{ ownerContainers.length }}</span>
+        </button>
+        <button
+          class="group-tab"
+          :class="{ active: activeGroupId === 'ungrouped' }"
+          :aria-pressed="activeGroupId === 'ungrouped'"
+          @click="activeGroupId = 'ungrouped'"
+        >
+          未分组
+        </button>
+        <button
+          v-for="group in myGroups"
+          :key="group.id"
+          class="group-tab"
+          :class="{ active: activeGroupId === group.id }"
+          :aria-pressed="activeGroupId === group.id"
+          @click="activeGroupId = group.id"
+        >
+          {{ group.name }}
+        </button>
+        <button class="group-add" @click="groupModal = true">
+          <AppIcon name="plus" :size="16" />分组
+        </button>
+      </div>
+      <div class="section-head inventory-section-head">
+        <div>
+          <h2>
+            {{ activeGroup?.name || (activeGroupId === 'ungrouped' ? '未分组' : '收纳空间')
+            }}<span class="count-label">{{ displayContainers.length }}</span>
+          </h2>
         </div>
-        <h4>{{ item.name }}</h4>
-        <div class="item-chips">
-          <button v-for="it in itemsInContainer(item.id)" :key="it.id" class="item-chip" :class="{ 'chip-expired': itemExpired(it) }" @click.stop="onItemEdit(it)">
-            {{ it.name }}<span v-if="daysLeftShort(it.expiry_date)" class="chip-days">{{ daysLeftShort(it.expiry_date) }}</span>
+        <div class="inline-actions">
+          <template v-if="editingSort"
+            ><button class="text-btn" :disabled="savingSort" @click="cancelSort">取消</button
+            ><button class="primary-btn compact" :disabled="savingSort" @click="saveSort">
+              保存顺序
+            </button></template
+          >
+          <template v-else
+            ><button
+              v-if="activeGroup"
+              class="icon-btn plain danger"
+              aria-label="删除当前分组"
+              @click="deleteGroup"
+            >
+              <AppIcon name="trash" :size="18" /></button
+            ><button v-if="displayContainers.length > 1" class="text-btn" @click="enterSortMode">
+              <AppIcon name="sort" :size="17" />排序</button
+            ><AiAssistantPanel
+          /></template>
+        </div>
+      </div>
+      <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>
+      <div v-if="displayContainers.length" class="containers-grid">
+        <article
+          v-for="(container, index) in displayContainers"
+          :key="container.id"
+          class="container-card"
+          :class="{ 'sort-editing': editingSort, dragging: dragIndex === index }"
+          :draggable="editingSort"
+          @dragstart="onDragStart(index, $event)"
+          @dragover="onDragOver($event, index)"
+          @drop.prevent
+          @dragend="dragIndex = null"
+        >
+          <button
+            class="container-open"
+            :disabled="editingSort"
+            :aria-label="'打开箱子：' + container.name"
+            @click="openContainerId = container.id"
+          >
+            <span class="container-cover" :class="'cover-tone-' + (index % 3)"
+              ><img
+                v-if="container.cover_attachment_id"
+                :src="attachmentUrl(container.cover_attachment_id)"
+                alt=""
+                loading="lazy" /><AppIcon v-else name="box" :size="30"
+            /></span>
+            <span class="container-copy"
+              ><span class="container-location">{{ container.group_name || '未分组' }}</span
+              ><strong>{{ container.name }}</strong
+              ><span class="container-summary">{{
+                container.item_names || container.notes || '还没有物品，放进第一件吧'
+              }}</span
+              ><span class="container-count">{{ container.item_count }} 种物品</span></span
+            >
+            <AppIcon class="container-chevron" name="right" :size="18" />
           </button>
-          <span v-if="!itemsInContainer(item.id).length" class="muted">暂无物品</span>
+          <div v-if="editingSort" class="sort-controls">
+            <button
+              class="outline-btn compact"
+              :disabled="index === 0 || savingSort"
+              :aria-label="'上移' + container.name"
+              @click="moveSort(index, -1)"
+            >
+              <AppIcon name="up" :size="17" />上移</button
+            ><button
+              class="outline-btn compact"
+              :disabled="index === displayContainers.length - 1 || savingSort"
+              :aria-label="'下移' + container.name"
+              @click="moveSort(index, 1)"
+            >
+              <AppIcon name="lower" :size="17" />下移
+            </button>
+          </div>
+        </article>
+      </div>
+      <div v-else class="empty">
+        <AppIcon name="box" :size="40" />
+        <h3>给物品安个家</h3>
+        <p>
+          {{ activeGroupId === 'all' ? '从一个抽屉、一个收纳箱开始。' : '这个分组暂时没有箱子。' }}
+        </p>
+        <button class="primary-btn" @click="openAddContainer">
+          <AppIcon name="plus" />新建箱子
+        </button>
+      </div>
+      <p v-if="displayContainers.length" class="list-end">收好的是物品，也是日常。</p>
+    </template>
+  </section>
+  <ContainerDetailModal :container-id="openContainerId" @close="openContainerId = null" />
+  <div
+    v-if="groupModal"
+    v-dialog="() => (groupModal = false)"
+    class="modal-backdrop"
+    aria-label="新建分组"
+    @click.self="groupModal = false"
+  >
+    <section class="modal small">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">整理空间</p>
+          <h2>新建分组</h2>
         </div>
-        <p>{{ item.notes || '空备注' }}</p>
-        <div class="container-bottom">
-          <button class="open-btn" @click.stop="openContainerDetail(item.id)">打开</button>
+        <button class="icon-btn plain" aria-label="关闭分组表单" @click="groupModal = false">
+          <AppIcon name="close" />
+        </button>
+      </div>
+      <form class="modal-form one-col" @submit.prevent="addGroup">
+        <label
+          >分组名称<input
+            v-model="groupName"
+            required
+            maxlength="80"
+            placeholder="如：客厅、厨房、书房"
+        /></label>
+        <div class="modal-actions">
+          <button type="button" class="outline-btn" @click="groupModal = false">取消</button
+          ><button class="primary-btn" :disabled="savingGroup">
+            {{ savingGroup ? '保存中…' : '创建分组' }}
+          </button>
         </div>
-      </article>
-    </div>
-    <div v-else class="empty">
-      <h3>{{ selectedMember?.name }}还没有箱子</h3>
-      <p>在物品总览或这里直接创建第一个箱子。</p>
-      <button class="primary-btn" @click="openAddContainer">＋ 新建箱子</button>
-    </div>
+      </form>
+    </section>
   </div>
-
-  <ContainerDetailModal :container-id="openContainerId" @close="closeContainerDetail" />
-
-  <AiAssistantPanel />
 </template>

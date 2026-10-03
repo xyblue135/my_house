@@ -128,6 +128,8 @@ watch(isOpen, (open) => {
 <template>
   <div
     v-if="isOpen"
+    v-dialog="close"
+    aria-label="图片预览"
     class="preview-backdrop"
     @click.self="close"
     @pointerdown="onPointerDown"
