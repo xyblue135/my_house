@@ -14,9 +14,9 @@ spring:
 
 itemnest:
   data-dir: ${ITEMNEST_DATA_DIR:../data}
-  # 局域网模式鉴权：仅在 ITEMNEST_BIND_ADDRESS != 127.0.0.1 时生效。
-  # 设置后客户端必须通过 Authorization: Bearer <token> 或 X-ItemNest-Token 头携带相同值。
-  lan-token: ${ITEMNEST_LAN_TOKEN:}
+  # 外网/反向代理也必须配置；配置后本机请求同样需要认证。旧变量仍兼容。
+  lan-token: ${ITEMNEST_ACCESS_TOKEN:${ITEMNEST_LAN_TOKEN:}}
+  require-auth: ${ITEMNEST_REQUIRE_AUTH:false}
   rabbitmq:
     enabled: ${ITEMNEST_RABBITMQ_ENABLED:false}
     url: ${ITEMNEST_RABBITMQ_URL:amqp://guest:guest@127.0.0.1/}

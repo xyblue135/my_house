@@ -1,130 +1,72 @@
-# 物栈 ItemNest Life OS v1.0
+# 物栈 ItemNest
 
-ItemNest 是一个本地优先的家庭物品与生活管理平台。它把物品收纳、备忘录、待办、记账、日程、习惯、健康、收藏和家庭事务放进同一套 Vue 3 + Spring Boot + SQLite 应用中；默认只监听本机，不需要注册账号或购买云服务。
+家庭物品、账单和菜谱管理。Vue 3 + TypeScript + Spring Boot + SQLite。
 
-## 为什么采用“统一生活中心”
+当前方向是 **一个家庭服务器，网页和 Android 共用数据，联网才能录入**。不维护三份业务代码，不做离线写入和同步队列。
 
-如果为每个小功能分别建表、写接口和页面，功能越多，重复代码和维护成本越高。v1.0 使用一套通用记录模型承载 35 个生活场景：共用搜索、状态、归属、时间、标签、金额、进度、置顶、归档和导入导出；每个场景只声明自己需要哪些字段。以后增加新功能通常只需在 `frontend/src/lifeCatalog.ts` 增加一项配置。
+## 目前已有
 
-## 功能全景
+- 家庭成员、分组、箱子、物品、照片和附件
+- 有效期信息、操作历史、AI 助手
+- 账单中心、炒菜中心
+- 响应式网页 / PWA
+- 同仓库的 Capacitor Android 工程
+- 首次连接向导、服务器认证、断线操作拦截、回到前台刷新
+- HTTPS 域名和 IPv6 URL 支持；Caddy + systemd 部署示例
 
-### 家庭物品
+技术路线、Android 构建、外网双栈部署和后续待办见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
-- 家庭成员：我 / 爸 / 妈
-- 箱子、物品、数量、状态、标签与备注
-- 图片和普通附件，本地保存
-- 有效期、保修、更换与定期检查
-- SQLite FTS5 全文检索
-- 快速录入、批量修改、操作历史与安全撤销
-- 可选 AI 检索和确认后执行，图片与附件不发送给大模型
+## 开发和构建
 
-### 生活中心（35 个场景）
+需要 JDK 21、Node.js 22+、pnpm。Android 还需要 Android SDK 36。
 
-| 分组 | 功能 |
-| --- | --- |
-| 效率 | 备忘录、待办事项、日程、目标计划、灵感箱、日记、学习、工作台 |
-| 财务 | 支出、收入、账单、预算、订阅续费、借还记录、保修票据 |
-| 生活 | 购物清单、习惯打卡、健康记录、用药提醒、运动健身、食谱菜单、联系人、应急信息 |
-| 收藏 | 书签收藏、阅读清单、影音清单、礼物清单、收藏目录 |
-| 家庭 | 旅行计划、车辆管理、家务维修、宠物档案、植物养护、纪念日、证件提醒 |
-
-所有场景按需支持：家庭成员归属、正文、完成状态、优先级、分类、标签、金额、发生时间、截止提醒、时间范围、重复规则、当前进度、目标值、链接、地点、联系人、置顶和归档。
-
-### 聚合与数据能力
-
-- 首页统计全部记录、待处理、今日到期、置顶数
-- 记账自动汇总本月收入、支出和结余
-- 待办、账单、维修、用药等共用到期队列
-- 习惯按日打卡并累计进度
-- 跨功能搜索、状态筛选、归档箱
-- JSON 导出与导入，便于备份和迁移
-- PWA 安装、离线静态壳、桌面/平板/手机响应式页面
-
-## 数据与隐私
-
-```text
-data/
-├─ inventory.db       # SQLite，物品与生活中心的权威数据源
-├─ ai_settings.json   # 可选 AI 设置
-└─ attachments/       # 物品附件
-```
-
-- 服务默认监听 `127.0.0.1:8765`，不要直接暴露到公网。
-- 需要局域网访问时显式设置 `ITEMNEST_BIND_ADDRESS=0.0.0.0`，并自行配置可信网络和防火墙。
-- Life OS 没有加入“密码管理器”。在没有端到端加密、主密码和安全审计前，把密码作为普通备忘录保存是不安全的；密码应继续交给 Bitwarden、1Password 或 KeePassXC。
-- 当前 AI 只接收库存文本字段，不接收图片、附件正文、Base64 或本地路径。
-
-## 技术栈
-
-- 前端：Vue 3、TypeScript、Vite、PWA
-- 后端：Java 21、Spring Boot 3、Spring JDBC
-- 数据：SQLite + FTS5
-- Android：Capacitor 壳复用同一套 Vue 页面（维护在 `android` 分支）
-- 可选集成：兼容 OpenAI Chat Completions 的 AI 接口、RabbitMQ 事件
-
-## Windows 构建与运行
-
-要求：JDK 21+、Node.js、pnpm（或 Corepack）。
-
-```bat
-build.bat
-start.bat
-```
-
-开发模式：
-
-```bat
-start_dev.bat
-```
-
-默认地址：
-
-- 生产整合版：`http://127.0.0.1:8765`
-- Vite 开发页：`http://127.0.0.1:15473`
-
-手动构建：
-
-```bat
+```powershell
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
+pnpm test
 pnpm build
-
-cd ..\backend
-mvnw.cmd clean package
+cd ../backend
+.\mvnw.cmd package
 ```
 
-生成文件：`backend/target/itemnest-1.0.0.jar`。
+Windows 也可使用 `build.bat`、`start.bat`、`start_dev.bat`。本地 Java 服务默认是 `http://127.0.0.1:8765`，Vite 开发地址是 `http://127.0.0.1:15473`。
 
-如果机器上同时安装了多个 JDK，先确认 `java -version` 必须显示 21 或更高版本。Windows 可临时指定：
+Linux 使用已配置好的 JDK 21 和 Maven，运行 `bash build.sh` / `bash start.sh`。公网长期运行请使用 `deploy/itemnest.service`，不要依赖交互式终端。
 
-```bat
-set JAVA_HOME=D:\4environment\Java\jdk-21.0.7
-set PATH=%JAVA_HOME%\bin;%PATH%
-```
-
-## Linux / macOS
-
-```bash
-./build.sh
-./start.sh
-```
+整合 JAR：`backend/target/itemnest-1.0.0.jar`。
 
 ## Android
 
-Android 包装工程单独维护在 `android` 分支，避免 Web 主线被 Gradle 文件和平台升级噪声淹没。它使用 Capacitor 加载同一套 Vue 生产构建；详细环境、命令、联网模式和签名步骤见该分支的 `ANDROID_BUILD.md`。
+```powershell
+cd frontend
+pnpm android:sync
+cd android
+.\gradlew.bat --no-daemon assembleDebug
+```
 
-推荐路线：
+APK：`frontend/android/app/build/outputs/apk/debug/app-debug.apk`。首次使用填写服务器 HTTPS 地址和家庭访问密钥；调试 APK 只用于测试，长期发布需要保存专用签名密钥。
 
-1. 快速验证：手机浏览器访问同一局域网内的 ItemNest，并安装 PWA。
-2. 可安装 APK：切换到 `android` 分支，用 Android Studio 构建 Capacitor 工程。
-3. 正式上线：为后端配置 HTTPS、认证和可信同步服务，再生成签名 AAB。
+`frontend/android/` 与 Web 一起维护在主线，无需切换所谓的 Android 业务分支。桌面暂时可安装 PWA；需要系统托盘、安装包等能力时再增加 Tauri 或 Electron 薄壳。
 
-## Git 分支
+## 数据和连接
 
-- `master`：当前稳定版
-- `feature/life-hub-v1`：Life OS v1.0 融合版实现
-- `android`：Android Capacitor 工程与移动端维护线
+```text
+data/
+├─ inventory.db
+├─ attachments/
+├─ ai_settings.json    # 可选
+└─ access-token.txt   # start_lan.bat 首次生成，勿公开
+```
 
-## 数据库升级
+- 本机开发可不配置密钥。只要配置 `ITEMNEST_ACCESS_TOKEN`（旧名 `ITEMNEST_LAN_TOKEN` 仍兼容），本机和远程 API 请求都必须认证。
+- 公网部署设置 `ITEMNEST_REQUIRE_AUTH=true` 和至少 32 位随机密钥，并通过 HTTPS 反向代理访问。没有密钥时公开监听会拒绝启动。
+- `start_lan.bat` 是局域网网页调试入口，会生成并保存随机访问密钥。Android 正式工程只接受 HTTPS。
+- `.env.example` 只是配置参考，不会自动载入；服务端需要设置环境变量或使用 systemd 的 EnvironmentFile。
+- 数据归属成员不等于独立账号权限。当前家庭共享密钥有完整读写权限。
+- SQLite 和附件只由服务器管理。备份与迁移应包含完整数据目录。
 
-启动 v1.0 时会自动创建 `life_entries` 和 `life_checkins`，不会删除或重写现有箱子、物品、附件和历史数据。升级前仍建议复制整个 `data/` 目录作为冷备份。
+## 验证
+
+- `frontend`: `pnpm test` 检查 IPv6 地址、认证、断线写入和错误服务响应；`pnpm build` 检查类型和生产构建。
+- `backend`: `mvn test` 检查库存、生活记录、认证、反向代理和 Android CORS。
+- Android: Gradle `assembleDebug`。最终还需要实际手机和外网 IPv4/IPv6 联调。

@@ -328,8 +328,13 @@ public class ItemNestController {
             Map<String, Object> meta = attachments.get(id); Resource resource = attachments.resource(id);
             if (meta == null || resource == null) throw new ApiException(HttpStatus.NOT_FOUND, "附件不存在");
             MediaType type; try { type = MediaType.parseMediaType(String.valueOf(meta.get("mime_type"))); } catch (Exception ex) { type = MediaType.APPLICATION_OCTET_STREAM; }
+            // Uploaded HTML/SVG must not execute on the application's authenticated origin.
+            String mime = type.getType() + "/" + type.getSubtype();
+            boolean inline = java.util.Set.of("image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/bmp",
+                "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav").contains(mime);
             return ResponseEntity.ok().contentType(type)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename*=UTF-8''" + java.net.URLEncoder.encode(String.valueOf(meta.get("filename")), java.nio.charset.StandardCharsets.UTF_8))
+                .header("Content-Security-Policy", "sandbox")
+                .header(HttpHeaders.CONTENT_DISPOSITION, (inline ? "inline" : "attachment") + "; filename*=UTF-8''" + java.net.URLEncoder.encode(String.valueOf(meta.get("filename")), java.nio.charset.StandardCharsets.UTF_8))
                 .body(resource);
         } catch (IOException ex) { throw new ApiException(HttpStatus.NOT_FOUND, "附件文件不存在"); }
     }

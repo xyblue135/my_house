@@ -2,18 +2,21 @@
 import AppShell from './components/AppShell.vue'
 import GlobalModals from './components/GlobalModals.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
+import ConnectionGate from './components/ConnectionGate.vue'
+import { connection } from './api'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
 import { useToast } from './composables/useToast'
 
-const { installPrompt, installApp } = useAppBootstrap()
+const { installPrompt, installApp, ready, connecting, connect } = useAppBootstrap()
 const modals = useItemModals()
 const { toastText } = useToast()
 provideItemModals(modals)
 </script>
 
 <template>
-  <div class="app-shell">
+  <ConnectionGate v-if="!ready || connection.status !== 'online'" :busy="connecting" @reconnect="connect" />
+  <div class="app-shell" :inert="!ready || connection.status !== 'online'">
     <AppShell />
 
     <main class="main">
@@ -27,7 +30,7 @@ provideItemModals(modals)
         </div>
       </header>
 
-      <router-view v-slot="{ Component }">
+      <router-view v-if="ready" v-slot="{ Component }">
         <keep-alive :max="4">
           <component :is="Component" />
         </keep-alive>

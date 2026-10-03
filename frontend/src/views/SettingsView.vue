@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { api, getApiBase, getLanToken, setApiBase, setLanToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
@@ -32,20 +32,27 @@ async function saveSettings() {
 }
 
 function saveBackendUrl() {
-  setApiBase(backendUrlInput.value)
-  toast('服务地址已保存，正在重新连接')
-  window.setTimeout(() => location.reload(), 500)
+  try {
+    setApiBase(backendUrlInput.value)
+    location.reload()
+  } catch (error) { toast((error as Error).message) }
 }
 
 function saveLanToken() {
   setLanToken(lanTokenInput.value || null)
-  toast(lanTokenInput.value ? '局域网 token 已保存' : '已清除局域网 token')
+  location.reload()
 }
 
 async function refreshMqStatus() {
   try { Object.assign(store.mqStatus, await api<MqStatus>('/api/mq/status')) }
   catch (error) { toast((error as Error).message) }
 }
+
+onMounted(async () => {
+  try { Object.assign(store.aiSettings, await api<AiSettings>('/api/settings')) }
+  catch (error) { toast((error as Error).message) }
+  await refreshMqStatus()
+})
 
 // ---- 成员管理 ----
 const newMemberName = ref('')
@@ -105,11 +112,11 @@ async function deleteMember(m: Member) {
         <div class="settings-icon">API</div>
         <div>
           <h3>数据服务地址</h3>
-          <p>Web 同机使用空值；Android 模拟器通常使用 http://10.0.2.2:8765，真机填写电脑或 NAS 的局域网地址。</p>
+          <p>填写家庭服务器的 HTTPS 地址。支持域名、IPv4 和带方括号的 IPv6 地址。</p>
         </div>
       </div>
       <form class="settings-form" @submit.prevent="saveBackendUrl">
-        <label>Backend URL<input v-model="backendUrlInput" placeholder="留空表示与页面同源" /></label>
+        <label>服务地址<input v-model="backendUrlInput" placeholder="https://items.example.com" /></label>
         <div class="settings-actions"><button class="primary-btn">保存并重连</button></div>
       </form>
     </div>
@@ -118,13 +125,13 @@ async function deleteMember(m: Member) {
       <div class="settings-title">
         <div class="settings-icon">LAN</div>
         <div>
-          <h3>局域网 token</h3>
-          <p>仅在 <code>ITEMNEST_BIND_ADDRESS</code> 不为 127.0.0.1 时由后端强制要求。值由后端环境变量 <code>ITEMNEST_LAN_TOKEN</code> 设置。</p>
+          <h3>家庭访问密钥</h3>
+          <p>使用家人提供的访问密钥连接服务器。修改后将重新验证连接。</p>
         </div>
       </div>
       <form class="settings-form" @submit.prevent="saveLanToken">
-        <label>Token<input v-model="lanTokenInput" placeholder="与后端 ITEMNEST_LAN_TOKEN 一致" /></label>
-        <div class="settings-actions"><button class="primary-btn">保存 token</button></div>
+        <label>访问密钥<input v-model="lanTokenInput" type="password" autocomplete="current-password" /></label>
+        <div class="settings-actions"><button class="primary-btn">保存并重连</button></div>
       </form>
     </div>
 

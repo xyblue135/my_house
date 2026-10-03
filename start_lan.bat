@@ -30,7 +30,13 @@ if not errorlevel 1 (
 set "ITEMNEST_DATA_DIR=%CD%\data"
 set "SERVER_PORT=8765"
 set "ITEMNEST_BIND_ADDRESS=0.0.0.0"
-if not defined ITEMNEST_LAN_TOKEN set "ITEMNEST_LAN_TOKEN=itemnest-lan"
+if not defined ITEMNEST_ACCESS_TOKEN if defined ITEMNEST_LAN_TOKEN set "ITEMNEST_ACCESS_TOKEN=%ITEMNEST_LAN_TOKEN%"
+if not defined ITEMNEST_ACCESS_TOKEN for /f "usebackq delims=" %%T in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\get-access-token.ps1" -DataDir "%CD%\data"`) do set "ITEMNEST_ACCESS_TOKEN=%%T"
+if not defined ITEMNEST_ACCESS_TOKEN (
+  echo [ItemNest] Could not create an access key.
+  exit /b 1
+)
+set "ITEMNEST_REQUIRE_AUTH=true"
 
 rem 检测本机局域网 IPv4（跳过回环与链路本地）
 set "LAN_IP="
@@ -38,15 +44,16 @@ for /f "usebackq tokens=*" %%I in (`powershell -NoProfile -Command "(Get-NetIPAd
 
 echo.
 echo [ItemNest] LAN mode enabled.
-echo [ItemNest] Local  URL:  http://127.0.0.1:8765   (本机，免 token)
+echo [ItemNest] Local  URL:  http://127.0.0.1:8765   (本机也需要访问密钥)
 if defined LAN_IP echo [ItemNest] Phone  URL:  http://%LAN_IP%:8765   (手机访问)
-echo [ItemNest] Token:  %ITEMNEST_LAN_TOKEN%
-echo [ItemNest] 手机首次访问请打开设置页填入上面这个 token。
+echo [ItemNest] Access key: %ITEMNEST_ACCESS_TOKEN%
+echo [ItemNest] 首次访问请在连接页填入上面的访问密钥。
+echo [ItemNest] 这是局域网网页调试入口；Android App 和外网请使用 HTTPS。
 echo [ItemNest] 若本机有多个网卡，请用 ipconfig 确认实际局域网 IP。
 echo [ItemNest] Press Ctrl+C to stop.
 echo.
 
-rem 本机浏览器等后端就绪后打开（走 127.0.0.1 免 token）
+rem 本机浏览器等后端就绪后打开，连接页填写访问密钥
 start "" powershell -NoProfile -WindowStyle Hidden -Command "$deadline=(Get-Date).AddMinutes(3); while((Get-Date) -lt $deadline) { try { $c=New-Object Net.Sockets.TcpClient; $a=$c.BeginConnect('127.0.0.1',8765,$null,$null); if($a.AsyncWaitHandle.WaitOne(300) -and $c.Connected) { $c.EndConnect($a); $c.Close(); Start-Process 'http://127.0.0.1:8765'; exit 0 }; $c.Close() } catch {}; Start-Sleep -Milliseconds 700 }; exit 1"
 
 java -jar "backend\target\itemnest-1.0.0.jar"

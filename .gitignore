@@ -26,3 +26,9 @@ data/
 
 # Legacy / one-off release bundles
 *.bundle
+
+# Signing material and per-machine deployment settings
+*.jks
+*.keystore
+deploy/server.env
+frontend/.env.production.local

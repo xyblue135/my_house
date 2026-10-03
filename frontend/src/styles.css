@@ -209,3 +209,11 @@ body.preview-open{overflow:hidden}
 .typing-dots span:nth-child(3){animation-delay:.4s}
 @keyframes typing{0%,60%,100%{opacity:.2;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
 @media(max-width:560px){.ai-panel{right:10px;bottom:80px;width:calc(100vw - 20px)}}
+
+/* Keep the assistant clear of the mobile navigation and improve family tap targets. */
+@media(max-width:560px){
+  .nav-btn{min-height:48px}.nav-btn em{font-size:12px}.nav-btn span{font-size:18px}
+  .ai-fab{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .ai-panel{bottom:calc(146px + env(safe-area-inset-bottom))}
+  .ai-panel .chat-panel{height:min(520px,60dvh)}
+}

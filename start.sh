@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-export JAVA_HOME="/d/4environment/Java/jdk-21.0.7"
-export PATH="$JAVA_HOME/bin:$PATH"
+[ -z "${JAVA_HOME:-}" ] || export PATH="$JAVA_HOME/bin:$PATH"
 [ -f backend/target/itemnest-1.0.0.jar ] || ./build.sh
 export ITEMNEST_DATA_DIR="$PWD/data"
 export SERVER_PORT="${SERVER_PORT:-8765}"
