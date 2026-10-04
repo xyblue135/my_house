@@ -1,8 +1,8 @@
-const CACHE = 'itemnest-online-v2'
+const CACHE = 'itemnest-online-v3'
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)))
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL.map(url => new Request(url, { cache: 'reload' })))))
   self.skipWaiting()
 })
 
@@ -17,7 +17,7 @@ self.addEventListener('fetch', event => {
   // Cache only our public app shell. API, attachments and credential-bearing URLs are never stored.
   if (url.search || !(SHELL.includes(url.pathname) || url.pathname.startsWith('/assets/'))) return
   event.respondWith(
-    fetch(event.request).then(response => {
+    fetch(event.request, { cache: 'no-cache' }).then(response => {
       if (response.ok) {
         const copy = response.clone()
         event.waitUntil(caches.open(CACHE).then(cache => cache.put(event.request, copy)))

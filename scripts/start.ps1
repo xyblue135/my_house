@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $jarPath = Join-Path $repoRoot 'backend\target\itemnest-1.0.0.jar'
+$buildStampPath = Join-Path $repoRoot 'backend\target\source-hash.txt'
 $children = @()
 
 function Use-Java {
@@ -64,11 +65,41 @@ function Invoke-BackendBuild([switch]$SkipTests) {
     } finally { Pop-Location }
 }
 
+function Get-SourceHash {
+    $files = @(
+        foreach ($directory in @('frontend\src', 'frontend\public', 'backend\src', 'backend\.mvn')) {
+            $path = Join-Path $repoRoot $directory
+            if (Test-Path -LiteralPath $path) { Get-ChildItem -LiteralPath $path -File -Recurse -Force }
+        }
+        Get-ChildItem -LiteralPath (Join-Path $repoRoot 'frontend') -File -Force |
+            Where-Object { $_.Extension -in @('.json', '.yaml', '.yml', '.ts', '.html', '.js', '.mjs', '.cjs') -or $_.Name -like '.env*' }
+        Get-Item -LiteralPath (Join-Path $repoRoot 'backend\pom.xml')
+    )
+    # Include relative paths as well as contents, so deletions and renames also invalidate the build.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $manifest = ($files | Sort-Object FullName | ForEach-Object {
+            $stream = [System.IO.File]::OpenRead($_.FullName)
+            try { $_.FullName.Substring($repoRoot.Length) + ':' + [BitConverter]::ToString($sha.ComputeHash($stream)) }
+            finally { $stream.Dispose() }
+        }) -join "`n"
+        return [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($manifest)))
+    }
+    finally { $sha.Dispose() }
+}
+
+function Test-BuildCurrent {
+    if (-not (Test-Path -LiteralPath $jarPath) -or -not (Test-Path -LiteralPath $buildStampPath)) { return $false }
+    return (Get-Content -LiteralPath $buildStampPath -Raw).Trim() -eq (Get-SourceHash)
+}
+
 function Build-App {
+    $sourceHash = Get-SourceHash
     Use-Pnpm
     Invoke-Frontend @('install', '--frozen-lockfile')
     Invoke-Frontend @('build')
     Invoke-BackendBuild
+    Set-Content -LiteralPath $buildStampPath -Value $sourceHash -Encoding UTF8
     Write-Host "[ItemNest] Build completed: $jarPath"
 }
 
@@ -109,7 +140,7 @@ Push-Location $repoRoot
 try {
     if ($Mode -eq 'help') {
         Write-Host 'Usage: start.bat [start|build|rebuild|dev|lan|worker|help] [-NoBrowser]'
-        Write-Host '  start    Start local web app (default); build first if JAR is missing.'
+        Write-Host '  start    Start local web app (default); rebuild if missing or sources changed.'
         Write-Host '  build    Build frontend and backend, including backend tests.'
         Write-Host '  rebuild  Build, then start local web app.'
         Write-Host '  dev      Build backend, then run backend + Vite with hot reload.'
@@ -134,7 +165,10 @@ try {
         Use-Pnpm
         Invoke-Frontend @('install', '--frozen-lockfile')
         Invoke-BackendBuild -SkipTests
-    } elseif ($Mode -eq 'rebuild' -or -not (Test-Path -LiteralPath $jarPath)) { Build-App }
+    } elseif ($Mode -eq 'rebuild' -or -not (Test-BuildCurrent)) {
+        Write-Host '[ItemNest] Building the current source before starting.'
+        Build-App
+    }
 
     if ($Mode -eq 'lan') {
         $env:ITEMNEST_BIND_ADDRESS = '0.0.0.0'
