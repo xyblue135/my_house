@@ -54,9 +54,6 @@ watch([() => props.containerId, () => store.items], async ([id], _, onCleanup) =
   }
 })
 
-function firstChar(name: string) {
-  return (name || '物').trim().charAt(0).toUpperCase()
-}
 function quantityText(item: Item) {
   return item.quantity == null ? '未记录' : `${item.quantity} 个`
 }
@@ -164,7 +161,6 @@ async function moveToGroup(groupId: number | null) {
               loading="lazy"
               @click.stop="openCoverPreview(item.cover_attachment_id)"
             />
-            <template v-else>{{ firstChar(item.name) }}</template>
           </div>
           <div class="container-item-main">
             <h4>{{ item.name }}</h4>

@@ -268,12 +268,13 @@ onBeforeUnmount(() => {
           class="search-result"
           @click="modals.openEditItem(item)"
         >
-          <span class="item-thumbnail"
-            ><img
+          <span class="item-thumbnail">
+            <img
               v-if="item.cover_attachment_id"
               :src="attachmentUrl(item.cover_attachment_id)"
-              alt="" /><AppIcon v-else name="box" :size="24"
-          /></span>
+              alt=""
+            />
+          </span>
           <span class="result-copy"
             ><strong>{{ item.name }}</strong
             ><span
