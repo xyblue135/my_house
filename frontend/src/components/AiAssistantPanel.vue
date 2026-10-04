@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onDeactivated, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { api } from '../api'
 import { useAppStore } from '../store'
 import type { AiAction, ChatResponse } from '../types'
 
+const props = defineProps<{ ownerIds: number[]; scopeLabel: string }>()
+const emit = defineEmits<{ busy: [value: boolean]; suggestion: [text: string] }>()
 const store = useAppStore()
 const { refreshData } = useAppBootstrap()
 
@@ -13,202 +15,139 @@ interface ChatMessage {
   id: number
   role: 'user' | 'assistant'
   text: string
+  ownerIds: number[]
+  scopeLabel: string
   action?: AiAction | null
   executed?: boolean
+  executing?: boolean
   error?: string
 }
 
-const open = ref(false)
-onDeactivated(() => { open.value = false })
-const chatMessages = ref<ChatMessage[]>([
-  {
-    id: 1,
-    role: 'assistant',
-    text: '想找什么东西？告诉我名称，或问问哪些物品快到期了。涉及修改时，我会先请你确认。',
-  },
-])
-let messageId = 2
-const chatInput = ref('')
+const chatMessages = ref<ChatMessage[]>([])
 const chatBusy = ref(false)
-const aiOwnerScope = ref<number[]>([store.selectedOwnerId])
-const aiLifecycleOnly = ref(false)
-const chatSuggestions = ['有哪些东西快到期了？', '哪些物品状态不正常？', '我有哪些箱子？']
+const executing = ref(false)
+const busy = computed(() => chatBusy.value || executing.value)
 const chatList = ref<HTMLElement | null>(null)
+const chatSuggestions = ['耳机', '哪些物品状态不正常？', '我有哪些箱子？']
+let messageId = 1
+let generation = 0
+let request: AbortController | null = null
 
-// 视角切换被移除后，默认跟随当前选中成员；成员变化时若 scope 空则回退
-watch(
-  () => store.selectedOwnerId,
-  (id) => {
-    if (!aiOwnerScope.value.includes(id)) aiOwnerScope.value = [id]
-  },
-)
+watch(busy, value => emit('busy', value), { flush: 'sync' })
+watch(() => props.ownerIds.join(','), reset)
+onBeforeUnmount(reset)
+onDeactivated(reset)
 
-function togglePanel() {
-  open.value = !open.value
-  if (open.value) {
-    nextTick(scrollChat)
-  }
-}
-
-function toggleAiOwner(id: number) {
-  aiOwnerScope.value = aiOwnerScope.value.includes(id)
-    ? aiOwnerScope.value.filter((x) => x !== id)
-    : [...aiOwnerScope.value, id]
-  if (!aiOwnerScope.value.length) aiOwnerScope.value = [id]
+function reset() {
+  generation++
+  request?.abort()
+  request = null
+  chatBusy.value = false
+  chatMessages.value = []
 }
 
 function describeAction(action: AiAction) {
-  if (action.type === 'add_item') return `新增「${String(action.data?.name || '物品')}」`
-  if (action.type === 'update_item') return `修改物品 #${action.item_id}`
-  if (action.type === 'move_item')
-    return `移动物品 #${action.item_id} 到箱子 #${action.container_id}`
-  if (action.type === 'delete_item') return `删除物品 #${action.item_id}`
-  if (action.type === 'add_container') return `新增箱子「${String(action.data?.name || '')}」`
-  if (action.type === 'set_lifecycle') return `设置物品 #${action.item_id} 有效期`
+  const itemName = store.items.find(item => item.id === action.item_id)?.name || '物品 #' + action.item_id
+  const boxName = store.containers.find(box => box.id === action.container_id)?.name || '箱子 #' + action.container_id
+  if (action.type === 'add_item') return '新增「' + String(action.data?.name || '物品') + '」'
+  if (action.type === 'update_item') return '修改「' + itemName + '」'
+  if (action.type === 'move_item') return '把「' + itemName + '」移到「' + boxName + '」'
+  if (action.type === 'delete_item') return '删除「' + itemName + '」'
+  if (action.type === 'add_container') return '新增箱子「' + String(action.data?.name || '') + '」'
   return action.type || '未知操作'
 }
 
 async function executeAction(message: ChatMessage) {
-  if (!message.action || message.executed) return
+  if (!message.action || message.executed || busy.value) return
   message.error = ''
+  message.executing = true
+  executing.value = true
   try {
     const result = await api<{ message: string }>('/api/ai/execute', {
       method: 'POST',
-      body: JSON.stringify({ action: message.action, owner_ids: aiOwnerScope.value }),
+      body: JSON.stringify({ action: message.action, owner_ids: message.ownerIds }),
     })
-    message.text = `${message.text}\n\n${result.message}`
+    message.text += '\n\n' + result.message
     message.executed = true
     await refreshData()
   } catch (error) {
     message.error = (error as Error).message
+  } finally {
+    message.executing = false
+    executing.value = false
   }
 }
 
-async function sendChat(text = chatInput.value) {
+async function sendChat(text: string) {
   const value = text.trim()
-  if (!value || chatBusy.value) return
-  chatMessages.value.push({ id: messageId++, role: 'user', text: value })
-  chatInput.value = ''
+  if (!value || busy.value) return
+  const ownerIds = [...props.ownerIds]
+  const scopeLabel = props.scopeLabel
+  const currentGeneration = generation
+  const controller = new AbortController()
+  request = controller
+  chatMessages.value.push({ id: messageId++, role: 'user', text: value, ownerIds, scopeLabel })
   chatBusy.value = true
   await nextTick()
   scrollChat()
   try {
     const response = await api<ChatResponse>('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({
-        message: value,
-        owner_ids: aiOwnerScope.value,
-        lifecycle_only: aiLifecycleOnly.value,
-      }),
+      body: JSON.stringify({ message: value, owner_ids: ownerIds }),
+      timeoutMs: 55000,
+      signal: controller.signal,
     })
+    if (currentGeneration !== generation) return
     chatMessages.value.push({
-      id: messageId++,
-      role: 'assistant',
-      text: response.reply || '已处理。',
-      action: response.action,
+      id: messageId++, role: 'assistant', text: response.reply || '已处理。',
+      action: response.action, ownerIds, scopeLabel,
     })
   } catch (error) {
-    chatMessages.value.push({
-      id: messageId++,
-      role: 'assistant',
-      text: `请求失败：${(error as Error).message}`,
-    })
+    if (currentGeneration !== generation) return
+    chatMessages.value.push({ id: messageId++, role: 'assistant', text: '请求失败：' + (error as Error).message, ownerIds, scopeLabel })
   } finally {
-    chatBusy.value = false
-    await nextTick()
-    scrollChat()
+    if (currentGeneration === generation) {
+      chatBusy.value = false
+      request = null
+      await nextTick()
+      scrollChat()
+    }
   }
 }
 
 function scrollChat() {
   if (chatList.value) chatList.value.scrollTop = chatList.value.scrollHeight
 }
-function onChatKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
-  event.preventDefault()
-  void sendChat()
-}
 
-const showAiModel = computed(() =>
-  store.aiSettings.has_api_key ? '帮你查找与整理物品' : '从家里的物品中查找',
-)
+defineExpose({ sendChat })
 </script>
 
 <template>
-  <button class="ai-launcher" :aria-expanded="open" @click="togglePanel">
-    <AppIcon name="sparkles" :size="17" />问助手
-  </button>
-
-  <div v-if="open" class="ai-backdrop" @click="open = false"></div>
-  <div v-if="open" v-dialog="() => (open = false)" aria-label="物栈助手" class="ai-panel">
-    <div class="chat-panel">
-      <div class="chat-head">
-        <div class="ai-avatar"><AppIcon name="sparkles" /></div>
-        <div>
-          <h3>物栈助手</h3>
-          <p>{{ showAiModel }}</p>
-        </div>
-        <button class="icon-btn plain" aria-label="关闭助手" @click="open = false">
-          <AppIcon name="close" />
-        </button>
+  <section class="ai-inline-results" aria-label="AI 查找结果" :aria-busy="busy">
+    <div class="chat-head">
+      <div class="ai-avatar"><AppIcon name="sparkles" /></div>
+      <div>
+        <h3>AI 查找</h3>
+        <p>在上方输入要找的物品或整理要求，修改前会请你确认。</p>
       </div>
-      <div class="ai-scope">
-        <b>查询 / 操作范围</b>
-        <div class="scope-buttons">
-          <button
-            v-for="m in store.members"
-            :key="m.id"
-            :class="{ active: aiOwnerScope.includes(m.id) }"
-            @click="toggleAiOwner(m.id)"
-          >
-            {{ m.name }}
-          </button>
-          <button :class="{ active: aiLifecycleOnly }" @click="aiLifecycleOnly = !aiLifecycleOnly">
-            仅看有效期
-          </button>
-        </div>
-        <small>只查询选中成员的物品。图片和附件不会发送给 AI。</small>
-      </div>
-      <div class="chat-messages" ref="chatList">
-        <div
-          v-for="message in chatMessages"
-          :key="message.id"
-          class="message"
-          :class="message.role"
-        >
-          <div class="bubble">
-            {{ message.text }}
-            <div v-if="message.action && !message.executed" class="action-card">
-              <p>待确认：{{ describeAction(message.action) }}</p>
-              <p v-if="message.error" class="action-error">{{ message.error }}</p>
-              <button @click="executeAction(message)">确认执行</button>
-            </div>
+      <button v-if="chatMessages.length" class="text-btn" :disabled="busy" @click="reset">清空</button>
+    </div>
+    <div v-if="chatMessages.length || chatBusy" ref="chatList" class="chat-messages" role="log" aria-live="polite" aria-label="AI 回复">
+      <div v-for="message in chatMessages" :key="message.id" class="message" :class="message.role">
+        <div class="bubble">
+          {{ message.text }}
+          <div v-if="message.action && !message.executed" class="action-card">
+            <p>待确认：{{ describeAction(message.action) }}</p>
+            <p class="muted">操作范围：{{ message.scopeLabel }}</p>
+            <p v-if="message.error" class="action-error" role="alert">{{ message.error }}</p>
+            <button :disabled="busy" @click="executeAction(message)">{{ message.executing ? '执行中…' : '确认执行' }}</button>
           </div>
         </div>
-        <div v-if="chatBusy" class="message assistant">
-          <div class="bubble typing-dots"><span>.</span><span>.</span><span>.</span></div>
-        </div>
       </div>
-      <div class="suggestions">
-        <button v-for="s in chatSuggestions" :key="s" @click="sendChat(s)">{{ s }}</button>
-      </div>
-      <form class="chat-input-wrap" @submit.prevent="sendChat()">
-        <textarea
-          v-model="chatInput"
-          rows="1"
-          aria-label="向助手提问"
-          placeholder="想找什么东西？"
-          @keydown="onChatKeydown"
-        ></textarea>
-        <button
-          type="submit"
-          class="send-btn"
-          aria-label="发送消息"
-          :disabled="chatBusy || !chatInput.trim()"
-        >
-          <AppIcon name="send" :size="19" />
-        </button>
-      </form>
+      <div v-if="chatBusy" class="message assistant"><div class="bubble" role="status">正在查找…</div></div>
     </div>
-  </div>
+    <div v-else class="suggestions">
+      <button v-for="suggestion in chatSuggestions" :key="suggestion" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
+    </div>
+  </section>
 </template>

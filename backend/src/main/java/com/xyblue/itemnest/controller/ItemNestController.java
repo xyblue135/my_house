@@ -460,8 +460,8 @@ public class ItemNestController {
         String message = String.valueOf(payload.getOrDefault("message", "")).trim();
         if (message.isBlank() || message.length() > 2000) throw new ApiException(HttpStatus.BAD_REQUEST, "消息不能为空或过长");
         List<Long> ownerIds = longList(payload.get("owner_ids"));
-        boolean lifecycleOnly = Boolean.TRUE.equals(payload.get("lifecycle_only"));
-        return aiService.chat(message, ownerIds, lifecycleOnly);
+        try { return aiService.chat(message, ownerIds); }
+        catch (IllegalArgumentException ex) { throw new ApiException(HttpStatus.BAD_REQUEST, ex.getMessage()); }
     }
 
     @PostMapping("/ai/execute")

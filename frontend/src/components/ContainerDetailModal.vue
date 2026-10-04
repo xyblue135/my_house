@@ -7,7 +7,6 @@ import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useImagePreview } from '../composables/useImagePreview'
 import { useToast } from '../composables/useToast'
 import { api, attachmentUrl } from '../api'
-import { daysLeft, daysLeftText } from '../utils/expiry'
 import type { Item } from '../types'
 
 const props = defineProps<{ containerId: number | null }>()
@@ -65,10 +64,6 @@ function onItemEdit(item: Item) {
 }
 function onItemDelete(item: Item) {
   modals.deleteItem(item, () => refreshData())
-}
-function itemExpired(item: Item): boolean {
-  const n = daysLeft(item.expiry_date)
-  return n != null && n < 0
 }
 
 async function moveToGroup(groupId: number | null) {
@@ -166,12 +161,6 @@ async function moveToGroup(groupId: number | null) {
             <h4>{{ item.name }}</h4>
             <div class="item-meta">
               <span class="chip">{{ quantityText(item) }}</span>
-              <span
-                v-if="item.expiry_date"
-                class="chip life"
-                :class="{ 'chip-expired': itemExpired(item) }"
-                >{{ daysLeftText(item.expiry_date) }}</span
-              >
               <span v-if="item.attachment_count" class="chip"
                 >附件 {{ item.attachment_count }}</span
               >

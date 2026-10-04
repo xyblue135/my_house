@@ -1,5 +1,5 @@
 import { inject, reactive, type App, type InjectionKey } from 'vue'
-import type { Container, ContainerGroup, Dashboard, Item, LifecycleEntry, Member, MqStatus, AiSettings } from './types'
+import type { Container, ContainerGroup, Dashboard, Item, Member, MqStatus, AiSettings } from './types'
 
 /**
  * 全局共享 store。App 启动时在 onMounted 之前初始化，注入后所有 view 通过 useAppStore 拿到。
@@ -10,7 +10,6 @@ export interface AppStore {
   containers: Container[]
   groups: ContainerGroup[]
   items: Item[]
-  lifecycles: LifecycleEntry[]
   dashboard: Dashboard | null
   mqStatus: MqStatus
   aiSettings: AiSettings
@@ -26,7 +25,6 @@ export function createAppStore(): AppStore {
     containers: [],
     groups: [],
     items: [],
-    lifecycles: [],
     dashboard: null,
     mqStatus: { enabled: false, connected: false, url: '—', exchange: '—', queue: '—', last_error: '', client: '' },
     aiSettings: { base_url: '', model: 'auto', has_api_key: false },

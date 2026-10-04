@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { api, AbortScope, checkConnection, connection } from '../api'
 import { useAppStore } from '../store'
-import type { Container, ContainerGroup, Dashboard, Item, LifecycleEntry, Member, Summary } from '../types'
+import type { Container, ContainerGroup, Dashboard, Item, Member, Summary } from '../types'
 
 const summary = ref<Summary>({ containers: 0, items: 0, quantity: 0, special: 0 })
 const installPrompt = ref<any>(null)
@@ -23,13 +23,12 @@ export function useAppBootstrap() {
   const scope = new AbortScope()
 
   async function loadAll() {
-    const [ms, ds, cs, gs, xs, ls] = await Promise.all([
+    const [ms, ds, cs, gs, xs] = await Promise.all([
       api<Member[]>('/api/members', { signal: scope.signal }),
       api<Dashboard>('/api/dashboard', { signal: scope.signal }),
       api<Container[]>('/api/containers', { signal: scope.signal }),
       api<ContainerGroup[]>('/api/groups', { signal: scope.signal }),
       api<Item[]>('/api/items', { signal: scope.signal }),
-      api<LifecycleEntry[]>('/api/lifecycle', { signal: scope.signal }),
     ])
     store.members = ms
     store.groups = gs
@@ -37,7 +36,6 @@ export function useAppBootstrap() {
     Object.assign(summary.value, ds.summary)
     store.containers = cs
     store.items = xs
-    store.lifecycles = ls
     if (!store.members.some(m => m.id === store.selectedOwnerId)) {
       store.setOwner(store.members[0]?.id ?? 1)
     }

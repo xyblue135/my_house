@@ -8,7 +8,6 @@ import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
 import AppIcon from '../components/AppIcon.vue'
-import { daysLeft, daysLeftText } from '../utils/expiry'
 import type { Container, Item } from '../types'
 
 const store = useAppStore()
@@ -18,6 +17,13 @@ const { toast } = useToast()
 const openContainerId = ref<number | null>(null)
 const activeGroupId = ref<number | 'all' | 'ungrouped'>('all')
 const query = ref('')
+const aiEnabled = ref(false)
+const aiBusy = ref(false)
+const searchOwnerIds = ref<number[]>([])
+const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
+const scopeLabel = computed(() => searchOwnerIds.value.length
+  ? store.members.filter(member => searchOwnerIds.value.includes(member.id)).map(member => member.name).join('、')
+  : '全部成员')
 const searchResults = ref<Item[]>([])
 const searching = ref(false)
 const searchError = ref('')
@@ -33,7 +39,6 @@ const ownerContainers = computed(() =>
   store.containers.filter((c) => c.owner_id === store.selectedOwnerId),
 )
 const myGroups = computed(() => store.groups.filter((g) => g.owner_id === store.selectedOwnerId))
-const selectedMember = computed(() => store.members.find((m) => m.id === store.selectedOwnerId))
 const totalItems = computed(() => ownerContainers.value.reduce((sum, c) => sum + c.item_count, 0))
 const filteredContainers = computed(() =>
   ownerContainers.value.filter(
@@ -48,7 +53,8 @@ const displayContainers = computed(() =>
   editingSort.value ? sortList.value : filteredContainers.value,
 )
 const matchingContainers = computed(() =>
-  ownerContainers.value.filter((c) =>
+  store.containers.filter((c) =>
+    (!searchOwnerIds.value.length || searchOwnerIds.value.includes(c.owner_id)) &&
     (c.name + ' ' + (c.notes || ''))
       .toLocaleLowerCase()
       .includes(query.value.trim().toLocaleLowerCase()),
@@ -66,17 +72,19 @@ watch(activeGroupId, cancelSort)
 watch(query, cancelSort)
 
 // Query the server, so search also finds items beyond the initial inventory page.
-watch([query, () => store.selectedOwnerId, () => store.items], ([value], _, onCleanup) => {
+watch([query, searchOwnerIds, aiEnabled, () => store.items], ([value], _, onCleanup) => {
   const keyword = value.trim()
   searchResults.value = []
   searchError.value = ''
-  searching.value = !!keyword
-  if (!keyword) return
+  searching.value = !!keyword && !aiEnabled.value
+  if (!keyword || aiEnabled.value) return
   const controller = new AbortController()
   const timer = window.setTimeout(async () => {
     try {
+      const params = new URLSearchParams({ q: keyword })
+      searchOwnerIds.value.forEach(id => params.append('owner_id', String(id)))
       const result = await api<Item[]>(
-        '/api/items?q=' + encodeURIComponent(keyword) + '&owner_id=' + store.selectedOwnerId,
+        '/api/items?' + params,
         { signal: controller.signal },
       )
       if (!controller.signal.aborted) searchResults.value = result
@@ -91,6 +99,20 @@ watch([query, () => store.selectedOwnerId, () => store.items], ([value], _, onCl
     controller.abort()
   })
 })
+
+function toggleSearchOwner(id: number) {
+  searchOwnerIds.value = searchOwnerIds.value.includes(id)
+    ? searchOwnerIds.value.filter(value => value !== id)
+    : [...searchOwnerIds.value, id]
+}
+function submitSearch(event?: Event) {
+  if (event instanceof KeyboardEvent && event.isComposing) return
+  if (aiEnabled.value && !aiBusy.value) void aiPanel.value?.sendChat(query.value)
+}
+function useSuggestion(text: string) {
+  query.value = text
+  submitSearch()
+}
 
 function selectOwner(event: Event) {
   store.setOwner(Number((event.target as HTMLSelectElement).value))
@@ -193,10 +215,6 @@ async function saveSort() {
     savingSort.value = false
   }
 }
-function expired(item: Item) {
-  const days = daysLeft(item.expiry_date)
-  return days != null && days < 0
-}
 onDeactivated(() => {
   openContainerId.value = null
   groupModal.value = false
@@ -230,20 +248,30 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="inventory-tools">
-      <div class="search-box">
-        <AppIcon name="search" :size="21" />
+      <form class="inventory-search" role="search" @submit.prevent="submitSearch()">
+      <div class="search-box" :class="{ 'ai-search-active': aiEnabled }">
+        <AppIcon :name="aiEnabled ? 'sparkles' : 'search'" :size="21" />
         <input
           v-model="query"
           type="search"
-          maxlength="200"
-          placeholder="找物品、箱子…"
+          :maxlength="aiEnabled ? 2000 : 200"
+          :placeholder="aiEnabled ? '找物品，或说说想怎么整理…' : '找物品、箱子…'"
           aria-label="搜索物品或箱子"
+          @keydown.enter.prevent="submitSearch($event)"
         />
-        <button v-if="query" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
+        <button v-if="query" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
           <AppIcon name="close" :size="18" />
         </button>
-        <kbd v-else>⌘ / Ctrl K</kbd>
       </div>
+      <label class="ai-search-toggle" :class="{ active: aiEnabled }">
+        <input v-model="aiEnabled" type="checkbox" role="switch" :disabled="aiBusy" />
+        <span class="toggle-track" aria-hidden="true"></span>
+        <span>AI 查找</span>
+      </label>
+      <button v-if="aiEnabled" type="submit" class="primary-btn search-submit" :disabled="aiBusy || !query.trim()">
+        {{ aiBusy ? '处理中…' : '查找' }}
+      </button>
+      </form>
       <div class="quick-actions">
         <button class="primary-btn" @click="openAddItem"><AppIcon name="plus" />添加物品</button>
         <button class="outline-btn" @click="openAddContainer">
@@ -252,11 +280,20 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <template v-if="query.trim()">
+    <div class="search-scope" role="group" aria-label="查找与操作范围">
+      <span>查找 / 操作范围</span>
+      <div class="scope-buttons">
+        <button :class="{ active: !searchOwnerIds.length }" :aria-pressed="!searchOwnerIds.length" :disabled="aiBusy" @click="searchOwnerIds = []">全部</button>
+        <button v-for="member in store.members" :key="member.id" :class="{ active: searchOwnerIds.includes(member.id) }" :aria-pressed="searchOwnerIds.includes(member.id)" :disabled="aiBusy" @click="toggleSearchOwner(member.id)">{{ member.name }}</button>
+      </div>
+    </div>
+    <AiAssistantPanel v-if="aiEnabled" ref="aiPanel" :owner-ids="searchOwnerIds" :scope-label="scopeLabel" @busy="aiBusy = $event" @suggestion="useSuggestion" />
+
+    <template v-if="query.trim() && !aiEnabled">
       <div class="section-head">
         <div>
           <h2>搜索结果</h2>
-          <p>范围：{{ selectedMember?.name }} 的物品和箱子</p>
+          <p>范围：{{ scopeLabel }} 的物品和箱子</p>
         </div>
       </div>
       <p v-if="searching" class="inline-notice" role="status">正在查找…</p>
@@ -278,11 +315,9 @@ onBeforeUnmount(() => {
           <span class="result-copy"
             ><strong>{{ item.name }}</strong
             ><span
-              >{{ item.container_name
+              >{{ item.owner_name }} · {{ item.container_name
               }}<template v-if="item.quantity != null"> · {{ item.quantity }} 个</template></span
-            ><small v-if="item.expiry_date" :class="{ 'expired-text': expired(item) }">{{
-              daysLeftText(item.expiry_date)
-            }}</small></span
+            ></span
           >
           <AppIcon name="right" :size="18" />
         </button>
@@ -300,7 +335,7 @@ onBeforeUnmount(() => {
         >
           <AppIcon name="folder" /><span class="result-copy"
             ><strong>{{ container.name }}</strong
-            ><span>{{ container.item_count }} 种物品</span></span
+            ><span>{{ container.owner_name }} · {{ container.item_count }} 种物品</span></span
           ><AppIcon name="right" :size="18" />
         </button>
       </div>
@@ -371,8 +406,7 @@ onBeforeUnmount(() => {
               <AppIcon name="trash" :size="18" /></button
             ><button v-if="displayContainers.length > 1" class="text-btn" @click="enterSortMode">
               <AppIcon name="sort" :size="17" />排序</button
-            ><AiAssistantPanel
-          /></template>
+            ></template>
         </div>
       </div>
       <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>

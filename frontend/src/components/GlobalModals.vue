@@ -94,31 +94,6 @@ function formatTime(value?: string | null) {
           >数量<input v-model="modals.itemForm.quantity" type="number" inputmode="numeric" min="0"
         /></label>
         <div class="span-2 option-panel">
-          <label class="switch-line">
-            <input v-model="modals.itemForm.expiry_enabled" type="checkbox" />
-            <b>有效期（可选）</b>
-            <span>食品、药品等有保质期的东西</span>
-          </label>
-          <div v-if="modals.itemForm.expiry_enabled" class="life-form">
-            <label class="span-2"
-              >计算方式
-              <select v-model="modals.itemForm.expiry_mode">
-                <option value="days">生产时间 + 天数自动算</option>
-                <option value="date">直接填截止日期</option>
-              </select>
-            </label>
-            <template v-if="modals.itemForm.expiry_mode === 'days'">
-              <label>生产时间<input v-model="modals.itemForm.start_date" type="date" /></label>
-              <label
-                >有效天数<input v-model="modals.itemForm.valid_days" type="number" min="1"
-              /></label>
-            </template>
-            <label v-else
-              >截止日期<input v-model="modals.itemForm.expiry_date" type="date"
-            /></label>
-          </div>
-        </div>
-        <div class="span-2 option-panel">
           <b>图片与附件（可选）</b>
           <p class="muted">照片会自动压缩，统一保存在家庭服务器，不发送给 AI。</p>
           <div class="upload-actions">
