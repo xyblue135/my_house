@@ -33,13 +33,18 @@ cd ../backend
 
 | 入口 | 用途 |
 | --- | --- |
-| `build.bat` | 构建前端和后端 |
-| `start.bat` | 启动本机服务；首次未构建时自动构建 |
-| `start_dev.bat` | 开发模式 |
-| `start_lan.bat` | 局域网网页调试，首次生成并保存随机访问密钥 |
+| 双击 `start.bat` | 启动本机服务；首次未构建时自动构建 |
+| `start.bat build` | 构建前端和后端，并运行后端测试 |
+| `start.bat rebuild` | 重新构建后启动，用于源码更新后 |
+| `start.bat dev` | 构建后端并启动后端与 Vite，前端修改实时更新 |
+| `start.bat lan` | 局域网网页调试，首次生成并保存随机访问密钥 |
+| `start.bat worker` | 启动现有 RabbitMQ 事件消费者 |
+| `start.bat help` | 查看参数说明 |
 | `build.sh` / `start.sh` | Linux 构建和启动，使用已配置的 JDK 21 与 Maven |
 
-Windows 脚本目前指定 `D:\4environment\Java\jdk-21.0.7`，换电脑时需要调整 Java 路径。
+Windows 根目录只保留 `start.bat`，共用逻辑在 `scripts/start.ps1`。优先使用 `JAVA_HOME` 或 PATH 中的 JDK 21+，并兼容本机原有 Java 路径。换电脑时设置 `JAVA_HOME` 即可。
+
+服务日志保存在数据目录的 `logs/` 下。按 Ctrl+C 停止启动器及其子服务；所有启动模式都可加 `-NoBrowser` 禁止自动打开浏览器。开发模式固定使用后端 8765、前端 15473，修改 Java 代码后需重启开发模式。
 
 - Java 服务默认地址：`http://127.0.0.1:8765`。
 - Vite 开发地址：`http://127.0.0.1:15473`，将 `/api` 代理到 Java 服务。
@@ -95,7 +100,7 @@ data/
 ├─ inventory.db
 ├─ attachments/
 ├─ ai_settings.json   # 可选
-└─ access-token.txt   # start_lan.bat 首次生成，勿公开
+└─ access-token.txt   # start.bat lan 首次生成，勿公开
 ```
 
 - 数据库和附件由服务器管理，备份与迁移应包含完整数据目录。
