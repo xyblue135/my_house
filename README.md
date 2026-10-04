@@ -2,33 +2,23 @@
 
 家庭物品、账单和菜谱管理。Vue 3 + TypeScript + Spring Boot + SQLite。
 
-当前优先完善 **适合手机竖屏的网页版**，连接家庭服务器后录入。网页和后续 Android 客户端共用数据与业务代码。
+当前优先完善适合手机竖屏的网页版，连接家庭服务器后录入。网页和后续 Android 客户端共用数据与业务代码。
 
-## 目前已有
+## 功能
 
-- 家庭成员、分组、箱子、物品、照片和附件
-- 有效期信息、操作历史、AI 助手
-- 账单中心、炒菜中心
-- 响应式网页 / PWA：手机底部导航、单列表单、收纳卡片和可折叠账单日历
-- 同仓库的 Capacitor Android 工程
-- 首次连接向导、服务器认证、断线操作拦截、回到前台刷新
-- HTTPS 域名和 IPv6 URL 支持；Caddy + systemd 部署示例
+- 物品：家庭成员、分组、箱子、物品、照片与附件、服务端搜索、排序。
+- 管理：有效期信息、操作历史与撤销、AI 助手。
+- 日常：家庭账本、月度收支与日历筛选、菜谱及图片。
+- 界面：手机底部导航与单列表单，电脑侧栏与多列布局，支持 PWA。
+- 连接：首次连接向导、访问密钥认证、断线操作拦截、回到前台刷新。
+- 部署：HTTPS 域名与 IPv6 URL 支持，附 Caddy 和 systemd 配置示例。
+- 客户端：同仓库保留 Capacitor Android 工程。
 
-技术路线、Android 构建、外网双栈部署和后续待办见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+AI 当前生成待确认操作，用户确认后执行；未配置 AI 时使用本地检索。多轮指代、一句话自动执行和持久任务队列尚未实现。RabbitMQ 是可选的操作事件通道，现有消费者记录事件日志。
 
-## 手机网页版
+## 开发和运行
 
-物品、账单、菜谱、设置共用浅色与绿色界面。物品页支持成员切换、分组、箭头排序，以及服务端搜索。手机以单列展示，电脑使用侧栏与多列布局。
-
-通过 HTTPS 打开后，可使用浏览器的“添加到主屏幕”；支持安装提示的浏览器也会显示“添加到桌面”。仍需连接服务器才能录入。
-
-设计参考 [Sortly 的照片库存列表](https://www.sortly.com/features/photos/) 和 [AnyList 的家庭清单](https://www.anylist.com/)，采用自己的配色与页面结构。图标来自 Lucide。
-
-验证范围和实际手机上仍需检查的项目见 [VALIDATION.md](VALIDATION.md)。
-
-## 开发和构建
-
-需要 JDK 21、Node.js 22+、pnpm。Android 还需要 Android SDK 36。
+需要 JDK 21、Node.js 22+、pnpm。
 
 ```powershell
 cd frontend
@@ -36,47 +26,139 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm build
 cd ../backend
-.\mvnw.cmd package
+.\mvnw.cmd clean package
 ```
 
-Windows 也可使用 `build.bat`、`start.bat`、`start_dev.bat`。本地 Java 服务默认是 `http://127.0.0.1:8765`，Vite 开发地址是 `http://127.0.0.1:15473`。
+整合 JAR：`backend/target/itemnest-1.0.0.jar`，其中包含构建后的网页。
 
-Linux 使用已配置好的 JDK 21 和 Maven，运行 `bash build.sh` / `bash start.sh`。公网长期运行请使用 `deploy/itemnest.service`，不要依赖交互式终端。
+| 入口 | 用途 |
+| --- | --- |
+| `build.bat` | 构建前端和后端 |
+| `start.bat` | 启动本机服务；首次未构建时自动构建 |
+| `start_dev.bat` | 开发模式 |
+| `start_lan.bat` | 局域网网页调试，首次生成并保存随机访问密钥 |
+| `build.sh` / `start.sh` | Linux 构建和启动，使用已配置的 JDK 21 与 Maven |
 
-整合 JAR：`backend/target/itemnest-1.0.0.jar`。
+Windows 脚本目前指定 `D:\4environment\Java\jdk-21.0.7`，换电脑时需要调整 Java 路径。
 
-## Android
+- Java 服务默认地址：`http://127.0.0.1:8765`。
+- Vite 开发地址：`http://127.0.0.1:15473`，将 `/api` 代理到 Java 服务。
+- `.env.example` 只是配置参考，不会自动载入；需要设置环境变量，或使用 systemd 的 `EnvironmentFile`。
+- 测试时将 `ITEMNEST_DATA_DIR` 指向独立目录，避免写入家庭数据。
+
+## 代码组织与客户端
+
+```text
+backend/                    Spring Boot API、SQLite 与业务逻辑
+frontend/src/               共用 Vue 界面、连接状态与 API 调用
+frontend/android/           Capacitor Android 平台工程
+frontend/capacitor.config.ts Android 打包配置
+scripts/                    辅助脚本
+deploy/                     Caddy、systemd 与服务端环境变量示例
+```
+
+平台工程放在同一仓库，功能修改使用短期分支。先通过手机网页验证使用体验；需要原生能力时复用现有 Android 工程，需要桌面托盘或安装包时再评估 Tauri / Electron。
+
+### 手机网页
+
+物品、账单、菜谱、设置共用浅色与绿色界面。手机以单列展示，表单和弹窗适配竖屏与安全区域。
+
+通过 HTTPS 打开后，可使用浏览器的“添加到主屏幕”；支持安装提示的浏览器也会显示“添加到桌面”。仍需连接服务器才能录入，不保存离线写入队列。
+
+设计参考 [Sortly 的照片库存列表](https://www.sortly.com/features/photos/) 和 [AnyList 的家庭清单](https://www.anylist.com/)，采用自己的配色与页面结构；图标来自 Lucide。
+
+### Android 构建
+
+另需 Android SDK 36。当前工程最低 Android 7（API 24）。
 
 ```powershell
 cd frontend
+pnpm install --frozen-lockfile
 pnpm android:sync
+# JAVA_HOME 指向 JDK 21，ANDROID_HOME 指向本机 Android SDK
 cd android
 .\gradlew.bat --no-daemon assembleDebug
 ```
 
-APK：`frontend/android/app/build/outputs/apk/debug/app-debug.apk`。首次使用填写服务器 HTTPS 地址和家庭访问密钥；调试 APK 只用于测试，长期发布需要保存专用签名密钥。
+APK：`frontend/android/app/build/outputs/apk/debug/app-debug.apk`。长期发布需保存专用 release 签名密钥，更新包使用同一签名；签名文件不能提交 Git。
 
-`frontend/android/` 与 Web 一起维护在主线，无需切换所谓的 Android 业务分支。桌面暂时可安装 PWA；需要系统托盘、安装包等能力时再增加 Tauri 或 Electron 薄壳。
+App 打包本地构建的 Vue 页面。首次使用填写服务器 HTTPS 地址和家庭访问密钥。地址可通过 `VITE_API_BASE_URL` 预设，访问密钥不能放进 Vite 环境变量或 APK。
 
-## 数据和连接
+App 只接受 HTTPS。裸 IPv6 URL 示例为 `https://[2001:db8::1]:8443`，实际地址需要有效的受信证书，建议使用域名；示例地址不能用于实际连接。
+
+初次连接、恢复前台和在线时每 30 秒刷新家庭库存。断线后暂停录入，可手动重连；网络恢复或回到前台时也会尝试连接。服务器收到写入但响应丢失时，客户端提示保存结果尚未确认，不自动重放。
+
+## 数据、备份和升级
 
 ```text
 data/
 ├─ inventory.db
 ├─ attachments/
-├─ ai_settings.json    # 可选
+├─ ai_settings.json   # 可选
 └─ access-token.txt   # start_lan.bat 首次生成，勿公开
 ```
 
-- 本机开发可不配置密钥。只要配置 `ITEMNEST_ACCESS_TOKEN`（旧名 `ITEMNEST_LAN_TOKEN` 仍兼容），本机和远程 API 请求都必须认证。
-- 公网部署设置 `ITEMNEST_REQUIRE_AUTH=true` 和至少 32 位随机密钥，并通过 HTTPS 反向代理访问。没有密钥时公开监听会拒绝启动。
-- `start_lan.bat` 是局域网网页调试入口，会生成并保存随机访问密钥。Android 正式工程只接受 HTTPS。
-- `.env.example` 只是配置参考，不会自动载入；服务端需要设置环境变量或使用 systemd 的 EnvironmentFile。
-- 数据归属成员不等于独立账号权限。当前家庭共享密钥有完整读写权限。
-- SQLite 和附件只由服务器管理。备份与迁移应包含完整数据目录。
+- 数据库和附件由服务器管理，备份与迁移应包含完整数据目录。
+- 最简单的可靠备份方式是停止服务后复制完整目录，并保留异机副本、验证恢复；在线备份需使用 SQLite backup API 等一致性备份方法。
+- 升级前先备份。旧版本数据库由启动程序执行增量迁移，无需清空数据库；旧箱子默认归属成员 ID 1，物品通过箱子继承成员归属。
+- 迁移包含成员、操作历史、生命周期、附件元数据和 FTS5 检索索引等结构。历史版本的原始说明可通过 Git 历史查阅。
+- 附件文件与数据库元数据分开存储。删除物品后会保留文件本体，以支持撤销时恢复附件元数据。
+- 当前 AI 接收经过成员范围和检索过滤的文本字段；图片、文件路径、附件正文和 Base64 不进入模型上下文。
 
-## 验证
+## 外网部署与 IPv6
 
-- `frontend`: `pnpm test` 检查 IPv6 地址、认证、断线写入和错误服务响应；`pnpm build` 检查类型和生产构建。
-- `backend`: `mvn test` 检查库存、生活记录、认证、反向代理和 Android CORS。
-- Android: Gradle `assembleDebug`。最终还需要实际手机和外网 IPv4/IPv6 联调。
+推荐结构：`网页 / Android → HTTPS 域名 → Caddy → 127.0.0.1:8765 → SQLite + 附件`。
+
+IPv6 既需要应用正确处理 URL，也需要 DNS、监听和网络真正可达。有条件时同时配置 A 和 AAAA，兼容仅支持 IPv4 的网络。
+
+1. 构建前端和后端，将整合 JAR 上传为 `/opt/itemnest/itemnest.jar`。服务器需要 Java 21，无需 Node.js。
+2. 创建专用 `itemnest` 系统用户，将 [systemd 配置](deploy/itemnest.service) 放入 `/etc/systemd/system/`。
+3. 将 [环境变量示例](deploy/server.env.example) 复制到 `/etc/itemnest/server.env`，用 `openssl rand -hex 32` 生成密钥，填写 `ITEMNEST_ACCESS_TOKEN` 并限制文件读取权限。保留 `ITEMNEST_REQUIRE_AUTH=true`。
+4. 停止旧服务，备份并复制完整数据目录到 `/var/lib/itemnest/`，将目录归属设为 `itemnest`。不要让多台服务器共享写入同一个 SQLite 文件。
+5. 安装 Caddy，将 [站点配置](deploy/Caddyfile) 中的 `items.example.com` 替换为实际域名，放入 `/etc/caddy/Caddyfile`。已有站点时合并该站点块。
+6. DNS 的 A 指向公网 IPv4，AAAA 指向稳定的公网 IPv6。云安全组、系统防火墙和路由器允许对应地址族的 TCP 80/443；Java 的 8765 端口只监听回环。
+7. 执行 `systemctl daemon-reload` 和 `systemctl enable --now itemnest`。通过 `caddy validate --config /etc/caddy/Caddyfile` 检查后 reload Caddy。Caddy 为有效域名申请和续期证书，见 [HTTPS 官方说明](https://caddyserver.com/docs/automatic-https)。
+
+在服务器以外、分别具备 IPv4 / IPv6 的网络检查：
+
+```bash
+# 无密钥应返回 401。
+curl -4 -i https://你的域名/api/connection
+curl -6 -i https://你的域名/api/connection
+# 带密钥应返回 service=itemnest、api_version=1、status=ok。
+curl -4 -H "Authorization: Bearer $ITEMNEST_ACCESS_TOKEN" https://你的域名/api/connection
+curl -6 -H "Authorization: Bearer $ITEMNEST_ACCESS_TOKEN" https://你的域名/api/connection
+```
+
+Java 直接监听 IPv6 可设 `ITEMNEST_BIND_ADDRESS=::`；能否同时接收 IPv4 取决于 JVM 与操作系统，需要实测。生产优先由 Caddy 处理公网双栈和 TLS。
+
+### 访问边界
+
+- 本机开发可不配置密钥。设置 `ITEMNEST_ACCESS_TOKEN` 后，本机和远程 API 均需认证；旧名 `ITEMNEST_LAN_TOKEN` 仍兼容。公开监听缺少密钥时拒绝启动，公网密钥至少 32 位。
+- 家庭共享密钥具有完整读写与删除权限；成员只是物品归属分类，不是独立账号权限。不适合直接开放给互不信任的多个家庭。
+- 一般 API 使用 Bearer 请求头。媒体内容为兼容浏览器标签使用查询密钥，并设置 `no-store`、`no-referrer`；自建访问日志需屏蔽查询字符串和认证头。
+- 密钥保存在设备应用存储中，Android 禁止系统应用备份。轮换共享密钥后，各设备需重新输入。
+
+## 验证记录
+
+以下记录对应 2026-10-04 手机网页版更新；文档整理不涉及业务代码变更。
+
+- 前端 `pnpm test`：12 项通过，覆盖服务器地址（含 IPv6）、认证与断线写入；`pnpm build` 类型检查与生产构建通过。
+- Java 21 下 `mvnw.cmd clean package`：17 项测试通过。最后仅打包前端细节更新时使用 `clean package -DskipTests`，随后启动整合 JAR 验证页面。
+- 四个页面检查 320、390、430、1280 px 宽度，无页面横向溢出。
+- 实际验证物品新增、搜索、数量修改、成员切换、新建箱子、分组、排序、账单编辑与日历筛选、菜谱编辑、照片选择与裁剪上传。
+- 验证弹窗焦点、Escape 关闭及图片预览与下层详情的配合。
+- 浏览器测试使用独立数据目录，未写入项目实际数据库。
+
+这些手机尺寸检查基于桌面 Chromium 视口。Android 真机拍照授权、软键盘、触摸手势、添加到主屏幕，以及公网域名与 IPv4 / IPv6 连通性仍需实测。本次界面更新未调用外部 AI 服务，也未重新生成 Android APK。
+
+## 后续工作
+
+优先用安卓手机验证“录入 → 搜索 → 找到箱子”的完整流程。
+
+- AI：名称匹配、歧义追问、会话上下文、可撤销的自动执行；需要后台排队时再补持久任务表。
+- 数据量：库存初始加载及单箱详情仍有 500 条上限，搜索结果也有上限，大库存需要分页。
+- 多设备：同时修改同一记录可能覆盖，需要版本校验和冲突提示。
+- 运维：部署家庭域名服务，验证备份恢复、两台手机协作与换网。
+
+当前家庭应用从 SQLite 单实例起步，RabbitMQ 可按联动需求启用；暂不引入 Redis、微服务或重写前端。
