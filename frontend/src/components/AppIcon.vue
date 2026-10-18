@@ -36,9 +36,11 @@ import {
   Wifi,
   Receipt,
   CalendarDays,
+  Cuboid,
 } from '@lucide/vue'
 const icons = {
   box: Package,
+  space: Cuboid,
   home: House,
   wallet: Wallet,
   cooking: CookingPot,

@@ -31,6 +31,7 @@ public class DatabaseInitializer implements ApplicationRunner {
         migrateHousehold();
         migrateGroups();
         migrateContainerNameScope();
+        migrateContainerPlacement();
         renameDefaultMembers();
         createV08Schema();
         migrateContainerAttachments();
@@ -145,6 +146,12 @@ public class DatabaseInitializer implements ApplicationRunner {
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 owner_id INTEGER NOT NULL DEFAULT 1,
                 sort_order INTEGER NOT NULL DEFAULT 0,
+                pos_x REAL NOT NULL DEFAULT 0,
+                pos_y REAL NOT NULL DEFAULT 0,
+                pos_z REAL NOT NULL DEFAULT 0,
+                size_w REAL NOT NULL DEFAULT 1,
+                size_h REAL NOT NULL DEFAULT 1,
+                size_d REAL NOT NULL DEFAULT 1,
                 UNIQUE(owner_id, name)
             )
             """);
@@ -286,6 +293,27 @@ public class DatabaseInitializer implements ApplicationRunner {
         });
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_owner ON containers(owner_id, id)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_group ON containers(group_id, id)");
+    }
+
+    /**
+     * 空间摆位：给箱子补上三维位置与尺寸列，供房间平面视图（/space）摆放。
+     * pos_x/pos_z 是箱子底面中心在地面上的坐标，pos_y 是底面离地高度（便于叠放）；
+     * size_w/size_h/size_d 是宽/高/深。单位约定 1 ≈ 10cm，由前端决定。
+     * 新库由 createBaseSchema 直接建好，旧库用 ALTER TABLE 逐列补齐。
+     */
+    private void migrateContainerPlacement() {
+        if (isMigrationApplied("2026-10-19-v1-container-placement")) return;
+        for (String column : List.of("pos_x", "pos_y", "pos_z")) {
+            if (!hasColumn("containers", column)) {
+                jdbc.execute("ALTER TABLE containers ADD COLUMN " + column + " REAL NOT NULL DEFAULT 0");
+            }
+        }
+        for (String column : List.of("size_w", "size_h", "size_d")) {
+            if (!hasColumn("containers", column)) {
+                jdbc.execute("ALTER TABLE containers ADD COLUMN " + column + " REAL NOT NULL DEFAULT 1");
+            }
+        }
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-container-placement");
     }
 
     /**

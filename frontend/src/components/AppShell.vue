@@ -2,16 +2,21 @@
 import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
+import { features } from '../composables/useFeatureToggles'
 
 const router = useRouter()
 const route = useRoute()
 
-const navItems = [
+const allNavItems = [
   { name: 'containers', label: '物品', icon: 'box' },
+  { name: 'space', label: '房间', icon: 'space' },
   { name: 'billing', label: '账单', icon: 'wallet' },
   { name: 'cooking', label: '菜谱', icon: 'cooking' },
   { name: 'settings', label: '设置', icon: 'settings' },
 ] as const
+const navItems = computed(() => allNavItems.filter(
+  (item) => item.name !== 'space' || features.spaceView,
+))
 const current = computed(() => route.name as string)
 </script>
 
@@ -21,7 +26,7 @@ const current = computed(() => route.name as string)
       <div class="brand-mark"><AppIcon name="box" :size="24" /></div>
       <div class="brand-name">物栈 <small>ITEMNEST</small></div>
     </div>
-    <nav class="nav-list" aria-label="主导航">
+    <nav class="nav-list" aria-label="主导航" :style="{ '--nav-cols': navItems.length }">
       <button
         v-for="item in navItems"
         :key="item.name"

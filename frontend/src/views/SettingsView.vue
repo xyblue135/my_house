@@ -5,6 +5,7 @@ import { api, getApiBase, getLanToken, setApiBase, setLanToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
+import { features, setFeature } from '../composables/useFeatureToggles'
 import type { AiSettings, Member, MqStatus } from '../types'
 
 const store = useAppStore()
@@ -111,6 +112,10 @@ async function deleteMember(m: Member) {
     toast((error as Error).message)
   }
 }
+
+function toggleSpaceView(event: Event) {
+  setFeature('spaceView', (event.target as HTMLInputElement).checked)
+}
 </script>
 
 <template>
@@ -153,6 +158,26 @@ async function deleteMember(m: Member) {
           <AppIcon name="plus" :size="17" />添加成员
         </button>
       </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-title">
+        <div class="settings-icon"><AppIcon name="space" /></div>
+        <div>
+          <h3>房间视图</h3>
+          <p>在 3D 房间里摆放箱子、调整大小，搜索时高亮它所在的位置。关闭后导航里不再显示入口。</p>
+        </div>
+      </div>
+      <label class="ai-search-toggle" :class="{ active: features.spaceView }">
+        <input
+          type="checkbox"
+          role="switch"
+          :checked="features.spaceView"
+          @change="toggleSpaceView($event)"
+        />
+        <span class="toggle-track" aria-hidden="true"></span>
+        <span>{{ features.spaceView ? '已开启' : '已关闭' }}</span>
+      </label>
     </div>
 
     <details class="settings-advanced">

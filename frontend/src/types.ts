@@ -8,7 +8,10 @@ export interface Container {
   id: number; name: string; notes: string; owner_id: number; owner_name: string;
   group_id?: number | null; group_name?: string | null;
   item_count: number; quantity_sum: number; attachment_count?: number; cover_attachment_id?: number | null;
-  item_names?: string | null; created_at?: string; updated_at?: string
+  item_names?: string | null; created_at?: string; updated_at?: string;
+  /** 房间视图摆位：pos 为底面中心坐标，size 为宽/高/深。单位 1 ≈ 50cm，缺省视为未摆放。 */
+  pos_x?: number; pos_y?: number; pos_z?: number;
+  size_w?: number; size_h?: number; size_d?: number;
 }
 
 export interface Item {
@@ -37,6 +40,14 @@ export interface AiSettings { base_url: string; model: string; has_api_key: bool
 export interface MqStatus { enabled: boolean; connected: boolean; url: string; exchange: string; queue: string; last_error: string; client: string }
 export interface AiAction { type: string; item_id?: number; container_id?: number; data?: Record<string, unknown> }
 export interface ChatResponse { reply: string; action: AiAction | null; mode: 'ai' | 'local' }
+
+/** 房间视图里一个已计算好摆位的箱子。x/z 为底面中心，y 为底面离地高度。 */
+export interface SpaceBox {
+  id: number; name: string;
+  x: number; y: number; z: number;
+  w: number; h: number; d: number;
+  itemCount: number; highlighted: boolean; selected: boolean;
+}
 
 export interface LifeEntry {
   id: number; owner_id: number; owner_name: string; kind: string; title: string; content: string;

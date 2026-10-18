@@ -20,7 +20,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class InventoryRepository {
     private static final Set<String> ITEM_FIELDS = Set.of("container_id", "name", "quantity", "quantity_text", "condition", "notes", "tags");
-    private static final Set<String> CONTAINER_FIELDS = Set.of("name", "notes", "owner_id", "group_id");
+    private static final Set<String> CONTAINER_FIELDS = Set.of(
+        "name", "notes", "owner_id", "group_id",
+        "pos_x", "pos_y", "pos_z", "size_w", "size_h", "size_d");
     private final JdbcTemplate jdbc;
 
     public InventoryRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
