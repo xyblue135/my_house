@@ -9,7 +9,6 @@ import java.util.Map;
 import com.xyblue.itemnest.exception.ApiException;
 import com.xyblue.itemnest.repository.HistoryRepository;
 import com.xyblue.itemnest.repository.InventoryRepository;
-import com.xyblue.itemnest.repository.LifecycleRepository;
 import com.xyblue.itemnest.repository.LifeRepository;
 import com.xyblue.itemnest.repository.RecipeRepository;
 import com.xyblue.itemnest.service.AiService;
@@ -29,16 +28,15 @@ import org.springframework.web.multipart.MultipartFile;
 public class ItemNestController {
     private final InventoryRepository repository;
     private final HistoryRepository history;
-    private final LifecycleRepository lifecycle;
     private final LifeRepository life;
     private final RecipeRepository recipes;
     private final AttachmentService attachments;
     private final AiService aiService;
     private final RabbitMqService mq;
 
-    public ItemNestController(InventoryRepository repository, HistoryRepository history, LifecycleRepository lifecycle, LifeRepository life,
+    public ItemNestController(InventoryRepository repository, HistoryRepository history, LifeRepository life,
                               RecipeRepository recipes, AttachmentService attachments, AiService aiService, RabbitMqService mq) {
-        this.repository = repository; this.history = history; this.lifecycle = lifecycle;
+        this.repository = repository; this.history = history;
         this.life = life; this.recipes = recipes; this.attachments = attachments; this.aiService = aiService; this.mq = mq;
     }
 
@@ -113,7 +111,6 @@ public class ItemNestController {
         return Map.of(
             "summary", repository.summary(),
             "members", repository.memberSummary(),
-            "lifecycle", lifecycle.summary(),
             "recent_history", history.list(null, null, 8)
         );
     }
@@ -178,10 +175,9 @@ public class ItemNestController {
     @GetMapping("/items")
     public List<Map<String, Object>> items(@RequestParam(defaultValue="") String q,
         @RequestParam(name="container_id", required=false) Long containerId,
-        @RequestParam(name="owner_id", required=false) List<Long> ownerIds,
-        @RequestParam(name="lifecycle_only", defaultValue="false") boolean lifecycleOnly) {
+        @RequestParam(name="owner_id", required=false) List<Long> ownerIds) {
         if (q.length() > 200) throw new ApiException(HttpStatus.BAD_REQUEST, "搜索关键词过长");
-        return repository.listItems(q, containerId, ownerIds == null ? List.of() : ownerIds, lifecycleOnly, 500);
+        return repository.listItems(q, containerId, ownerIds == null ? List.of() : ownerIds, 500);
     }
 
     @PostMapping("/items")
@@ -220,38 +216,6 @@ public class ItemNestController {
         return Map.of("ok", true);
     }
 
-    @PostMapping("/items/quick-entry")
-    public Map<String, Object> quickEntry(@RequestBody Map<String, Object> payload) {
-        long containerId = requireId(payload.get("container_id"), "目标箱子不存在");
-        Map<String, Object> container = requireContainer(containerId);
-        List<Map<String, Object>> rows = mapList(payload.get("items"));
-        if (rows.isEmpty() || rows.size() > 100) throw new ApiException(HttpStatus.BAD_REQUEST, "快速录入需要 1-100 条物品");
-        rows.forEach(row -> { requireName(row.get("name"), "物品名称不能为空"); row.putIfAbsent("quantity", 1); });
-        List<Map<String, Object>> created = repository.createItemsBatch(containerId, rows);
-        history.record("BATCH_CREATE", "batch", null, null, containerId, null, idValue(container.get("owner_id")), "batch",
-            "快速录入 " + created.size() + " 类物品到「" + container.get("name") + "」", Map.of("items", created), Map.of("items", created));
-        mq.publishEvent("inventory.items.batch_created", Map.of("items", created));
-        return Map.of("items", created, "count", created.size());
-    }
-
-    @PostMapping("/items/batch")
-    public Map<String, Object> batchUpdate(@RequestBody Map<String, Object> payload) {
-        List<Long> ids = longList(payload.get("ids"));
-        if (ids.isEmpty() || ids.size() > 200) throw new ApiException(HttpStatus.BAD_REQUEST, "请选择 1-200 个物品");
-        Map<String, Object> data = map(payload.get("data"));
-        if (data.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "没有要修改的字段");
-        if (data.containsKey("container_id")) requireContainer(requireId(data.get("container_id"), "目标箱子不存在"));
-        List<Map<String, Object>> before = ids.stream().map(repository::getItem).filter(x -> x != null).toList();
-        List<Map<String, Object>> after = repository.updateItemsBatch(ids, data);
-        Long containerId = data.containsKey("container_id") ? idValue(data.get("container_id")) : (after.isEmpty() ? null : idValue(after.getFirst().get("container_id")));
-        Long related = before.isEmpty() ? null : idValue(before.getFirst().get("container_id"));
-        Long owner = after.isEmpty() ? null : idValue(after.getFirst().get("owner_id"));
-        history.record("BATCH_UPDATE", "batch", null, null, containerId, related, owner, "batch",
-            "批量修改 " + after.size() + " 类物品", Map.of("items", before), Map.of("items", after));
-        mq.publishEvent("inventory.items.batch_updated", Map.of("before", before, "items", after));
-        return Map.of("items", after, "count", after.size());
-    }
-
     @GetMapping("/history")
     public List<Map<String, Object>> history(@RequestParam(name="container_id", required=false) Long containerId,
         @RequestParam(name="owner_id", required=false) Long ownerId,
@@ -264,30 +228,6 @@ public class ItemNestController {
             mq.publishEvent("inventory.history.undone", Map.of("history_id", id));
             return result;
         } catch (IllegalArgumentException | IllegalStateException ex) { throw new ApiException(HttpStatus.CONFLICT, ex.getMessage()); }
-    }
-
-    @GetMapping("/lifecycle")
-    public List<Map<String, Object>> lifecycle(@RequestParam(name="owner_id", required=false) List<Long> ownerIds,
-        @RequestParam(defaultValue="ALL") String status, @RequestParam(defaultValue="200") int limit) {
-        return lifecycle.list(ownerIds == null ? List.of() : ownerIds, status, limit);
-    }
-
-    @PutMapping("/items/{itemId}/lifecycle")
-    public Map<String, Object> saveLifecycle(@PathVariable long itemId, @RequestBody Map<String, Object> payload) {
-        Map<String, Object> item = requireItem(itemId); Map<String, Object> before = lifecycle.getByItem(itemId);
-        Map<String, Object> after = lifecycle.upsert(itemId, payload);
-        history.record("UPDATE_LIFECYCLE", "lifecycle", itemId, itemId, idValue(item.get("container_id")), null, idValue(item.get("owner_id")), "manual",
-            "更新「" + item.get("name") + "」生命周期", before, after);
-        return after;
-    }
-
-    @DeleteMapping("/items/{itemId}/lifecycle")
-    public Map<String, Object> deleteLifecycle(@PathVariable long itemId) {
-        Map<String, Object> item = requireItem(itemId); Map<String, Object> before = lifecycle.getByItem(itemId);
-        lifecycle.delete(itemId);
-        history.record("DELETE_LIFECYCLE", "lifecycle", itemId, itemId, idValue(item.get("container_id")), null, idValue(item.get("owner_id")), "manual",
-            "移除「" + item.get("name") + "」生命周期", before, null);
-        return Map.of("ok", true);
     }
 
     @GetMapping("/items/{itemId}/attachments")
@@ -360,21 +300,6 @@ public class ItemNestController {
         return life.list(kind, query, ownerId, status, archived == null ? false : archived, limit);
     }
 
-    @GetMapping("/life/overview")
-    public Map<String, Object> lifeOverview() { return life.overview(); }
-
-    @GetMapping("/life/export")
-    public Map<String, Object> exportLife() {
-        return Map.of("version", 1, "exported_at", java.time.LocalDateTime.now().toString(), "entries", life.list(null, "", null, null, null, 1000));
-    }
-
-    @PostMapping("/life/import")
-    public Map<String, Object> importLife(@RequestBody Map<String, Object> payload) {
-        List<Map<String, Object>> entries = mapList(payload.get("entries"));
-        if (entries.isEmpty() || entries.size() > 1000) throw new ApiException(HttpStatus.BAD_REQUEST, "导入需要 1-1000 条有效记录");
-        return Map.of("imported", life.importEntries(entries));
-    }
-
     @PostMapping("/life")
     public Map<String, Object> addLifeEntry(@RequestBody Map<String, Object> payload) {
         requireName(payload.get("kind"), "功能类型不能为空");
@@ -398,25 +323,6 @@ public class ItemNestController {
     public Map<String, Object> deleteLifeEntry(@PathVariable long id) {
         if (!life.delete(id)) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
         return Map.of("ok", true);
-    }
-
-    @PutMapping("/life/{id}/checkins/{date}")
-    public Map<String, Object> checkin(@PathVariable long id, @PathVariable String date, @RequestBody(required=false) Map<String, Object> payload) {
-        if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
-        Map<String, Object> body = payload == null ? Map.of() : payload;
-        double value = body.get("value") == null ? 1 : Double.parseDouble(String.valueOf(body.get("value")));
-        return life.checkin(id, date, value, String.valueOf(body.getOrDefault("note", "")));
-    }
-
-    @DeleteMapping("/life/{id}/checkins/{date}")
-    public Map<String, Object> removeCheckin(@PathVariable long id, @PathVariable String date) {
-        return Map.of("ok", life.removeCheckin(id, date));
-    }
-
-    @GetMapping("/life/{id}/checkins")
-    public List<Map<String, Object>> checkins(@PathVariable long id, @RequestParam(defaultValue="90") int limit) {
-        if (life.get(id) == null) throw new ApiException(HttpStatus.NOT_FOUND, "记录不存在");
-        return life.checkins(id, limit);
     }
 
     @GetMapping("/recipes")
@@ -499,6 +405,5 @@ public class ItemNestController {
     private static long longValue(Object value){return value instanceof Number n?n.longValue():Long.parseLong(String.valueOf(value));}
 
     private static Map<String,Object> map(Object raw){ Map<String,Object> result=new LinkedHashMap<>(); if(raw instanceof Map<?,?> m)m.forEach((k,v)->result.put(String.valueOf(k),v)); return result; }
-    private static List<Map<String,Object>> mapList(Object raw){ List<Map<String,Object>> result=new ArrayList<>(); if(raw instanceof List<?> list) for(Object value:list){Map<String,Object> row=map(value);if(!row.isEmpty())result.add(row);} return result; }
     private static List<Long> longList(Object raw){ List<Long> result=new ArrayList<>(); if(raw instanceof List<?> list)for(Object x:list)try{result.add(longValue(x));}catch(Exception ignored){} else if(raw!=null)try{result.add(longValue(raw));}catch(Exception ignored){} return result; }
 }

@@ -47,8 +47,3 @@ export interface LifeEntry {
   extra_json: string; pinned: number | boolean; archived: number | boolean; completed_at?: string | null;
   checked_today?: number | boolean; checkin_count?: number; created_at: string; updated_at: string;
 }
-
-export interface LifeOverview {
-  total: number; open_tasks: number; due_today: number; pinned: number;
-  income_month: number; expense_month: number; by_kind: Array<{kind:string; count:number}>;
-}

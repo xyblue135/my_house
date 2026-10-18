@@ -1,10 +1,7 @@
 package com.xyblue.itemnest.repository;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,71 +83,6 @@ public class LifeRepository {
 
     public boolean delete(long id) { return jdbc.update("DELETE FROM life_entries WHERE id=?", id) > 0; }
 
-    public Map<String, Object> overview() {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("total", value("SELECT COUNT(*) FROM life_entries WHERE archived=0"));
-        result.put("open_tasks", value("SELECT COUNT(*) FROM life_entries WHERE kind IN ('todo','shopping','bill','maintenance') AND status<>'DONE' AND archived=0"));
-        result.put("due_today", value("SELECT COUNT(*) FROM life_entries WHERE date(due_at)<=date('now','localtime') AND status<>'DONE' AND archived=0"));
-        result.put("pinned", value("SELECT COUNT(*) FROM life_entries WHERE pinned=1 AND archived=0"));
-        String first = YearMonth.now().atDay(1).toString();
-        String next = YearMonth.now().plusMonths(1).atDay(1).toString();
-        result.put("income_month", decimal("SELECT COALESCE(SUM(amount),0) FROM life_entries WHERE kind='income' AND archived=0 AND COALESCE(occurred_at,created_at)>=? AND COALESCE(occurred_at,created_at)<?", first, next));
-        result.put("expense_month", decimal("SELECT COALESCE(SUM(amount),0) FROM life_entries WHERE kind='expense' AND archived=0 AND COALESCE(occurred_at,created_at)>=? AND COALESCE(occurred_at,created_at)<?", first, next));
-        result.put("by_kind", jdbc.queryForList("SELECT kind, COUNT(*) count FROM life_entries WHERE archived=0 GROUP BY kind ORDER BY count DESC, kind"));
-        return result;
-    }
-
-    public List<Map<String, Object>> checkins(long entryId, int limit) {
-        return jdbc.queryForList("SELECT * FROM life_checkins WHERE entry_id=? ORDER BY checkin_date DESC LIMIT ?", entryId, Math.max(1, Math.min(limit, 366)));
-    }
-
-    @Transactional
-    public Map<String, Object> checkin(long entryId, String date, double value, String note) {
-        String day = date == null || date.isBlank() ? LocalDate.now().toString() : date;
-        // 单条 SQL：取旧值 (NULL→0)，写入新值 (UPSERT)，回算差值
-        Double previous = jdbc.query(
-            "SELECT value FROM life_checkins WHERE entry_id=? AND checkin_date=?",
-            rs -> rs.next() ? rs.getDouble(1) : null,
-            entryId, day);
-        double diff = value - (previous == null ? 0d : previous);
-        jdbc.update("""
-            INSERT INTO life_checkins(entry_id,checkin_date,value,note) VALUES(?,?,?,?)
-            ON CONFLICT(entry_id,checkin_date) DO UPDATE SET value=excluded.value,note=excluded.note
-            """, entryId, day, value, note == null ? "" : note);
-        if (diff != 0) {
-            jdbc.update("UPDATE life_entries SET progress=MAX(0,progress+?),updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                diff, entryId);
-        }
-        return jdbc.queryForMap("SELECT * FROM life_checkins WHERE entry_id=? AND checkin_date=?", entryId, day);
-    }
-
-    @Transactional
-    public boolean removeCheckin(long entryId, String date) {
-        Double amount = jdbc.query(
-            "SELECT value FROM life_checkins WHERE entry_id=? AND checkin_date=?",
-            rs -> rs.next() ? rs.getDouble(1) : null,
-            entryId, date);
-        if (amount == null) return false;
-        int deleted = jdbc.update("DELETE FROM life_checkins WHERE entry_id=? AND checkin_date=?", entryId, date);
-        if (deleted > 0) {
-            jdbc.update("UPDATE life_entries SET progress=MAX(0,progress-?),updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                amount, entryId);
-        }
-        return deleted > 0;
-    }
-
-    @Transactional
-    public int importEntries(List<Map<String, Object>> entries) {
-        int count = 0;
-        for (Map<String, Object> row : entries) {
-            if (row.get("kind") == null || row.get("title") == null || String.valueOf(row.get("title")).isBlank()) continue;
-            create(row); count++;
-        }
-        return count;
-    }
-
-    private int value(String sql) { Integer result = jdbc.queryForObject(sql, Integer.class); return result == null ? 0 : result; }
-    private double decimal(String sql, Object... args) { Double result = jdbc.queryForObject(sql, Double.class, args); return result == null ? 0 : result; }
     private static Object normalize(String key, Object value) {
         if (Set.of("owner_id", "priority").contains(key)) return number(value).longValue();
         if (Set.of("amount", "progress", "target_value").contains(key)) return value == null || String.valueOf(value).isBlank() ? null : number(value).doubleValue();

@@ -2,7 +2,6 @@ package com.xyblue.itemnest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,7 +21,7 @@ class ItemNestApplicationTests {
     void contextLoads() {}
 
     @Test
-    void lifeHubSupportsCreateUpdateCheckinAndDelete() {
+    void lifeHubSupportsCreateUpdateAndDelete() {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("owner_id", 1);
         payload.put("kind", "habit");
@@ -35,12 +34,8 @@ class ItemNestApplicationTests {
         assertThat(life.list("habit", "测试习惯", 1L, null, false, 20)).isNotEmpty();
 
         life.update(id, Map.of("pinned", true, "status", "ACTIVE"));
-        life.checkin(id, LocalDate.now().toString(), 1, "完成");
-        life.checkin(id, LocalDate.now().toString(), 1, "重复提交仍保持幂等");
         Map<String, Object> updated = life.get(id);
         assertThat(((Number) updated.get("pinned")).intValue()).isEqualTo(1);
-        assertThat(((Number) updated.get("progress")).doubleValue()).isEqualTo(1);
-        assertThat(life.checkins(id, 10)).hasSize(1);
 
         assertThat(life.delete(id)).isTrue();
         assertThat(life.get(id)).isNull();

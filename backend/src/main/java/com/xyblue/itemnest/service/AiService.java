@@ -185,9 +185,9 @@ public class AiService {
             }
             return response(reply.toString().stripTrailing(), null, "local");
         }
-        List<Map<String, Object>> matches = repository.listItems(message, null, scope, false, 8);
+        List<Map<String, Object>> matches = repository.listItems(message, null, scope, 8);
         if (isConditionIntent(message) && matches.isEmpty()) {
-            matches = repository.listItems("", null, scope, false, 100).stream()
+            matches = repository.listItems("", null, scope, 100).stream()
                 .filter(item -> nonBlank(item.get("condition")) && !"正常".equals(string(item.get("condition")))).limit(8).toList();
         }
         if (matches.isEmpty()) return response("关键词检索没有找到匹配物品。可以换一个关键词，或调整上方的查找范围。", null, "local");
@@ -214,9 +214,9 @@ public class AiService {
         for (Map<String, Object> member : members) for (Map<String, Object> container : repository.listContainers(id(member)))
             out.append("- container_id=").append(container.get("id")).append(" | ").append(container.get("owner_name")).append("/ ").append(container.get("name")).append('\n');
 
-        List<Map<String, Object>> candidates = repository.listItems(message, null, scope, false, MAX_AI_CONTEXT_ITEMS);
+        List<Map<String, Object>> candidates = repository.listItems(message, null, scope, MAX_AI_CONTEXT_ITEMS);
         if (isConditionIntent(message) && candidates.isEmpty()) {
-            candidates = repository.listItems("", null, scope, false, 100).stream()
+            candidates = repository.listItems("", null, scope, 100).stream()
                 .filter(item -> nonBlank(item.get("condition")) && !"正常".equals(string(item.get("condition")))).limit(MAX_AI_CONTEXT_ITEMS).toList();
         }
         out.append("候选物品（本地检索后最多 ").append(MAX_AI_CONTEXT_ITEMS).append(" 条）：\n");
@@ -272,7 +272,12 @@ public class AiService {
     private static Map<String,Object> map(Object value){Map<String,Object> r=new LinkedHashMap<>();if(value instanceof Map<?,?> raw)raw.forEach((k,v)->r.put(String.valueOf(k),v));return r;}
     private static boolean nonBlank(Object value){return value!=null&&!String.valueOf(value).isBlank();}
     private static String string(Object value){return value==null?"":String.valueOf(value);}
-    private static Number number(Object value){return value instanceof Number n?n:Long.parseLong(String.valueOf(value));}
+    private static Number number(Object value){
+        if (value instanceof Number n) return n;
+        String text = String.valueOf(value);
+        try { return Long.parseLong(text); }
+        catch (NumberFormatException ex) { throw new IllegalArgumentException("AI 操作中的 ID 必须是整数，实际收到: " + text); }
+    }
     private static String firstNonBlank(String... values){for(String v:values)if(v!=null&&!v.isBlank())return v;return "";}
     private static void require(boolean condition,String message){if(!condition)throw new IllegalArgumentException(message);}
     private static long id(Map<String,Object> map){return number(map.get("id")).longValue();}

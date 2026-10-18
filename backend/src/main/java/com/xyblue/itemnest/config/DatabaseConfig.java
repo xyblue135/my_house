@@ -27,6 +27,8 @@ public class DatabaseConfig {
         SQLiteConfig config = new SQLiteConfig();
         config.enforceForeignKeys(true);
         config.setBusyTimeout(5000);
+        // WAL 允许读写并发：多设备同时写时显著降低 SQLITE_BUSY（默认的 rollback journal 会整库加锁）。
+        config.setJournalMode(SQLiteConfig.JournalMode.WAL);
         SQLiteDataSource dataSource = new SQLiteDataSource(config);
         dataSource.setUrl("jdbc:sqlite:" + dbPath);
         return dataSource;

@@ -2,6 +2,7 @@ package com.xyblue.itemnest.config;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,9 +30,11 @@ public class DatabaseInitializer implements ApplicationRunner {
         createBaseSchema();
         migrateHousehold();
         migrateGroups();
+        migrateContainerNameScope();
         renameDefaultMembers();
         createV08Schema();
         migrateContainerAttachments();
+        dropVestigialLifecycle();
         createLifeHubSchema();
         createRecipesSchema();
         migrateRecipeAttachments();
@@ -136,10 +139,13 @@ public class DatabaseInitializer implements ApplicationRunner {
         jdbc.execute("""
             CREATE TABLE IF NOT EXISTS containers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
                 notes TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                owner_id INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(owner_id, name)
             )
             """);
         jdbc.execute("""
@@ -214,6 +220,85 @@ public class DatabaseInitializer implements ApplicationRunner {
     }
 
     /**
+     * 箱子名唯一性从「全局唯一」改为「按成员唯一」：两个成员可以各自有一个「工具箱」。
+     * 旧库的 containers.name 带全局 UNIQUE 约束，SQLite 不能直接改约束，需重建表。
+     * 新库由 createBaseSchema 直接建好 UNIQUE(owner_id, name)，这里检测到全局唯一才重建。
+     */
+    private void migrateContainerNameScope() {
+        if (isMigrationApplied("2026-10-17-v1-container-name-scoped-unique")) return;
+        if (hasColumn("containers", "owner_id") && hasGlobalNameUnique()) {
+            rebuildContainersForScopedNameUnique();
+        }
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-17-v1-container-name-scoped-unique");
+    }
+
+    /** 判断 containers 是否仍带「只按 name 一列」的全局唯一约束。 */
+    private boolean hasGlobalNameUnique() {
+        for (Map<String, Object> index : jdbc.queryForList("PRAGMA index_list(containers)")) {
+            Object unique = index.get("unique");
+            boolean isUnique = unique instanceof Number n ? n.intValue() != 0 : Boolean.parseBoolean(String.valueOf(unique));
+            if (!isUnique) continue;
+            String indexName = String.valueOf(index.get("name"));
+            List<Map<String, Object>> columns = jdbc.queryForList("PRAGMA index_info(" + indexName + ")");
+            if (columns.size() == 1 && "name".equalsIgnoreCase(String.valueOf(columns.get(0).get("name")))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 重建 containers 表以替换唯一约束。整个重建在同一连接上执行：
+     * 先关掉外键校验与 schema 重解析（legacy_alter_table），避免 DROP/RENAME 触发
+     * items、attachments 等引用表/触发器的旧 schema 解析错误；完成后恢复。
+     */
+    private void rebuildContainersForScopedNameUnique() {
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            try (java.sql.Statement st = connection.createStatement()) {
+                // 摘掉引用 containers 的 FTS trigger，避免重建/改名时解析旧 schema 失败；createFtsTriggers 会重建
+                for (String trigger : List.of("items_ai", "items_ad", "items_au", "containers_au_fts", "members_au_fts")) {
+                    st.execute("DROP TRIGGER IF EXISTS " + trigger);
+                }
+                st.execute("PRAGMA foreign_keys = OFF");
+                st.execute("PRAGMA legacy_alter_table = ON");
+                st.execute("DROP TABLE IF EXISTS containers_new");
+                st.execute("""
+                    CREATE TABLE containers_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        notes TEXT NOT NULL DEFAULT '',
+                        owner_id INTEGER NOT NULL DEFAULT 1,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        group_id INTEGER,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(owner_id, name)
+                    )
+                    """);
+                st.execute("""
+                    INSERT INTO containers_new(id, name, notes, owner_id, sort_order, group_id, created_at, updated_at)
+                    SELECT id, name, notes, owner_id, sort_order, group_id, created_at, updated_at FROM containers
+                    """);
+                st.execute("DROP TABLE containers");
+                st.execute("ALTER TABLE containers_new RENAME TO containers");
+                st.execute("PRAGMA legacy_alter_table = OFF");
+                st.execute("PRAGMA foreign_keys = ON");
+            }
+            return null;
+        });
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_owner ON containers(owner_id, id)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_containers_group ON containers(group_id, id)");
+    }
+
+    /**
+     * 移除已废弃的 item_lifecycle 表：物品有效期功能与相关 UI 已下线，
+     * 表仅残留历史数据，撤销链路也已不再依赖它。
+     */
+    private void dropVestigialLifecycle() {
+        if (isMigrationApplied("2026-10-17-v1-remove-item-lifecycle")) return;
+        jdbc.execute("DROP TABLE IF EXISTS item_lifecycle");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-17-v1-remove-item-lifecycle");
+    }
+
+    /**
      * 把默认成员「我 / 爸 / 妈」一次性改名为「用户1 / 用户2 / 用户3」。
      * 用 `AND name = 旧名` 保护：用户已手动改名则不再覆盖。
      */
@@ -247,22 +332,6 @@ public class DatabaseInitializer implements ApplicationRunner {
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_history_container ON operation_history(container_id, created_at DESC)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_history_related_container ON operation_history(related_container_id, created_at DESC)");
         jdbc.execute("CREATE INDEX IF NOT EXISTS idx_history_owner ON operation_history(owner_id, created_at DESC)");
-
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS item_lifecycle (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id INTEGER NOT NULL UNIQUE,
-                lifecycle_type TEXT NOT NULL DEFAULT 'EXPIRY',
-                start_date TEXT,
-                expiry_date TEXT,
-                remind_days INTEGER NOT NULL DEFAULT 7,
-                notes TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE CASCADE
-            )
-            """);
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_expiry ON item_lifecycle(expiry_date)");
 
         jdbc.execute("""
             CREATE TABLE IF NOT EXISTS attachments (

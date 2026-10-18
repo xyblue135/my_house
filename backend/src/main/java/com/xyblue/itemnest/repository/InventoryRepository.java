@@ -182,32 +182,29 @@ public class InventoryRepository {
     }
 
     public List<Map<String, Object>> listItems(String query, Long containerId) {
-        return listItems(query, containerId, List.of(), false, 500);
+        return listItems(query, containerId, List.of(), 500);
     }
 
-    public List<Map<String, Object>> listItems(String query, Long containerId, List<Long> ownerIds, boolean lifecycleOnly, int limit) {
+    public List<Map<String, Object>> listItems(String query, Long containerId, List<Long> ownerIds, int limit) {
         if (query != null && !query.isBlank()) {
-            List<Map<String, Object>> fts = searchItems(query, containerId, ownerIds, lifecycleOnly, limit);
+            List<Map<String, Object>> fts = searchItems(query, containerId, ownerIds, limit);
             if (!fts.isEmpty()) return fts;
         }
-        return listItemsLike(query, containerId, ownerIds, lifecycleOnly, limit);
+        return listItemsLike(query, containerId, ownerIds, limit);
     }
 
-    private List<Map<String, Object>> listItemsLike(String query, Long containerId, List<Long> ownerIds, boolean lifecycleOnly, int limit) {
+    private List<Map<String, Object>> listItemsLike(String query, Long containerId, List<Long> ownerIds, int limit) {
         StringBuilder sql = new StringBuilder("""
             SELECT i.*, c.name AS container_name, c.owner_id, m.name AS owner_name,
-                   l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
-                   l.remind_days, l.notes AS lifecycle_notes,
                    (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM items i
             JOIN containers c ON c.id = i.container_id
             JOIN household_members m ON m.id = c.owner_id
-            LEFT JOIN item_lifecycle l ON l.item_id = i.id
             WHERE 1=1
             """);
         List<Object> args = new ArrayList<>();
-        appendFilters(sql, args, containerId, ownerIds, lifecycleOnly);
+        appendFilters(sql, args, containerId, ownerIds);
         if (query != null && !query.isBlank()) {
             String like = "%" + query.trim() + "%";
             sql.append(" AND (i.name LIKE ? OR i.notes LIKE ? OR i.tags LIKE ? OR i.condition LIKE ? OR c.name LIKE ? OR m.name LIKE ?)");
@@ -218,14 +215,12 @@ public class InventoryRepository {
         return jdbc.queryForList(sql.toString(), args.toArray());
     }
 
-    public List<Map<String, Object>> searchItems(String query, Long containerId, List<Long> ownerIds, boolean lifecycleOnly, int limit) {
+    public List<Map<String, Object>> searchItems(String query, Long containerId, List<Long> ownerIds, int limit) {
         String ftsQuery = buildFtsQuery(query);
         if (ftsQuery.isBlank()) return List.of();
         try {
             StringBuilder sql = new StringBuilder("""
                 SELECT i.*, c.name AS container_name, c.owner_id, m.name AS owner_name,
-                       l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
-                       l.remind_days, l.notes AS lifecycle_notes,
                        (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
                        (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id,
                        bm25(items_fts) AS search_rank
@@ -233,41 +228,36 @@ public class InventoryRepository {
                 JOIN items i ON i.id = CAST(items_fts.item_id AS INTEGER)
                 JOIN containers c ON c.id = i.container_id
                 JOIN household_members m ON m.id = c.owner_id
-                LEFT JOIN item_lifecycle l ON l.item_id = i.id
                 WHERE items_fts MATCH ?
                 """);
             List<Object> args = new ArrayList<>(); args.add(ftsQuery);
-            appendFilters(sql, args, containerId, ownerIds, lifecycleOnly);
+            appendFilters(sql, args, containerId, ownerIds);
             sql.append(" ORDER BY bm25(items_fts), i.updated_at DESC LIMIT ?");
             args.add(Math.max(1, Math.min(limit, 200)));
             return jdbc.queryForList(sql.toString(), args.toArray());
         } catch (org.springframework.dao.DataAccessException ex) {
             org.slf4j.LoggerFactory.getLogger(InventoryRepository.class)
                 .warn("FTS5 search failed for query '{}', falling back to LIKE: {}", query, ex.getMessage());
-            return listItemsLike(query, containerId, ownerIds, lifecycleOnly, limit);
+            return listItemsLike(query, containerId, ownerIds, limit);
         }
     }
 
-    private void appendFilters(StringBuilder sql, List<Object> args, Long containerId, List<Long> ownerIds, boolean lifecycleOnly) {
+    private void appendFilters(StringBuilder sql, List<Object> args, Long containerId, List<Long> ownerIds) {
         if (containerId != null) { sql.append(" AND i.container_id = ?"); args.add(containerId); }
         if (ownerIds != null && !ownerIds.isEmpty()) {
             sql.append(" AND c.owner_id IN (").append(ownerIds.stream().map(x -> "?").collect(Collectors.joining(","))).append(")");
             args.addAll(ownerIds);
         }
-        if (lifecycleOnly) sql.append(" AND l.item_id IS NOT NULL");
     }
 
     public Map<String, Object> getItem(long id) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT i.*, c.name AS container_name, c.owner_id, m.name AS owner_name,
-                   l.lifecycle_type, l.start_date AS lifecycle_start_date, l.expiry_date,
-                   l.remind_days, l.notes AS lifecycle_notes,
                    (SELECT COUNT(*) FROM attachments a WHERE a.item_id = i.id) AS attachment_count,
                    (SELECT a.id FROM attachments a WHERE a.item_id = i.id AND a.kind = 'image' ORDER BY a.id DESC LIMIT 1) AS cover_attachment_id
             FROM items i
             JOIN containers c ON c.id = i.container_id
             JOIN household_members m ON m.id = c.owner_id
-            LEFT JOIN item_lifecycle l ON l.item_id = i.id
             WHERE i.id = ?
             """, id);
         return rows.isEmpty() ? null : rows.getFirst();
@@ -300,82 +290,6 @@ public class InventoryRepository {
 
     public boolean deleteItem(long id) {
         deleteFtsForItem(id); return jdbc.update("DELETE FROM items WHERE id = ?", id) > 0;
-    }
-
-    public List<Map<String, Object>> createItemsBatch(long containerId, List<Map<String, Object>> rows) {
-        if (rows.isEmpty()) return List.of();
-        Map<String, Object> container = getContainer(containerId);
-        if (container == null) throw new IllegalArgumentException("目标箱子不存在");
-        long ownerId = number(container.get("owner_id")).longValue();
-        // 规范化所有行
-        List<Object[]> batchArgs = new ArrayList<>(rows.size());
-        List<String> names = new ArrayList<>(rows.size());
-        for (Map<String, Object> row : rows) {
-            String name = string(row.get("name")).trim();
-            if (name.isEmpty()) throw new IllegalArgumentException("物品名称不能为空");
-            Integer qty = nullableInteger(row.getOrDefault("quantity", 1));
-            String qtyText = string(row.getOrDefault("quantity_text", "")).trim();
-            String condition = string(row.getOrDefault("condition", "正常")).trim();
-            if (condition.isEmpty()) condition = "正常";
-            String notes = string(row.getOrDefault("notes", "")).trim();
-            String tags = string(row.getOrDefault("tags", "")).trim();
-            batchArgs.add(new Object[]{ containerId, name, qty, qtyText, condition, notes, tags });
-            names.add(name);
-        }
-        // 一次 batchUpdate
-        int[] result = jdbc.batchUpdate("""
-            INSERT INTO items(container_id, name, quantity, quantity_text, condition, notes, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, batchArgs);
-        // 取回自增 id
-        List<Long> ids = new ArrayList<>();
-        for (int i = 0; i < result.length; i++) {
-            if (result[i] > 0) {
-                Long id = jdbc.queryForObject("SELECT id FROM items WHERE name = ? AND container_id = ? ORDER BY id DESC LIMIT 1", Long.class, names.get(i), containerId);
-                if (id != null) ids.add(id);
-            }
-        }
-        // 批量刷新 FTS
-        if (!ids.isEmpty()) refreshFtsForItems(ids);
-        // 重新读回完整对象
-        List<Map<String, Object>> created = new ArrayList<>(ids.size());
-        for (Long id : ids) {
-            Map<String, Object> item = getItem(id);
-            if (item != null) created.add(item);
-        }
-        return created;
-    }
-
-    public List<Map<String, Object>> updateItemsBatch(List<Long> ids, Map<String, Object> data) {
-        if (ids.isEmpty() || data.isEmpty()) return List.of();
-        // 仅保留允许的字段
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> e : data.entrySet()) {
-            if (!ITEM_FIELDS.contains(e.getKey())) continue;
-            Object v = e.getValue();
-            if (v instanceof String s) v = s.trim();
-            normalized.put(e.getKey(), v);
-        }
-        if (normalized.isEmpty()) return List.of();
-        String setClause = normalized.keySet().stream().map(k -> k + " = ?").collect(Collectors.joining(", "));
-        String sql = "UPDATE items SET " + setClause + ", updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-        List<Object[]> batchArgs = new ArrayList<>(ids.size());
-        for (Long id : ids) {
-            Object[] params = new Object[normalized.size() + 1];
-            int i = 0;
-            for (Object value : normalized.values()) params[i++] = value;
-            params[i] = id;
-            batchArgs.add(params);
-        }
-        jdbc.batchUpdate(sql, batchArgs);
-        refreshFtsForItems(ids);
-        // 重新读回
-        List<Map<String, Object>> result = new ArrayList<>(ids.size());
-        for (Long id : ids) {
-            Map<String, Object> item = getItem(id);
-            if (item != null) result.add(item);
-        }
-        return result;
     }
 
     /**

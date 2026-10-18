@@ -11,7 +11,6 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xyblue.itemnest.repository.HistoryRepository;
 import com.xyblue.itemnest.repository.InventoryRepository;
-import com.xyblue.itemnest.repository.LifecycleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,7 +22,6 @@ class AiScopeTests {
     @Autowired InventoryRepository repository;
     @Autowired HistoryRepository history;
     @Autowired AttachmentService attachments;
-    @Autowired LifecycleRepository lifecycle;
     @Autowired ObjectMapper mapper;
     @TempDir Path settingsDir;
     AiService ai;
@@ -68,12 +66,16 @@ class AiScopeTests {
         assertThat(((Number) repository.getItem(itemA).get("container_id")).longValue()).isEqualTo(boxB);
     }
 
-    @Test void oldExpiryDataIsNotShownAndExpiryActionsAreRejected() {
-        lifecycle.upsert(itemA, Map.of("expiry_date", "2037-08-09", "lifecycle_type", "EXPIRY"));
-        assertThat(ai.chat(keyword, List.of(1L)).get("reply").toString()).doesNotContain("2037-08-09", "有效期", "生命周期");
+    @Test void lifecycleActionsAreRejected() {
         assertThatThrownBy(() -> ai.executeAction(Map.of("type", "set_lifecycle", "item_id", itemA), List.of()))
             .isInstanceOf(IllegalArgumentException.class);
-        assertThat(lifecycle.getByItem(itemA).get("expiry_date")).isEqualTo("2037-08-09");
+    }
+
+    @Test void nonNumericActionIdIsRejectedWithFriendlyMessage() {
+        assertThatThrownBy(() -> ai.executeAction(Map.of("type", "delete_item", "item_id", "not-a-number"), List.of()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("整数");
+        assertThat(repository.getItem(itemA)).isNotNull();
     }
 
     @Test void listingBoxesRespectsSelectedMembers() {

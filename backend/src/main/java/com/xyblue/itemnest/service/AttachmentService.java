@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,10 +24,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class AttachmentService {
     private static final long MAX_FILE_BYTES = 200L * 1024 * 1024;
     private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper;
     private final Path root;
 
-    public AttachmentService(JdbcTemplate jdbc, Path itemNestDataDir) throws IOException {
+    public AttachmentService(JdbcTemplate jdbc, ObjectMapper objectMapper, Path itemNestDataDir) throws IOException {
         this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
         this.root = itemNestDataDir.resolve("attachments");
         Files.createDirectories(root);
     }
@@ -108,6 +112,11 @@ public class AttachmentService {
     /**
      * 启动时清理孤儿附件文件：磁盘上有但 DB 已无对应记录。
      * 通过比对 attachments 表的 stored_name 集合与磁盘文件，过滤出多余文件。
+     *
+     * 注意：删除物品时附件元数据行会被外键级联删掉，文件本体留在磁盘以支持撤销
+     * （撤销时由 DELETE_ITEM 的 before_json 快照把元数据行还原）。因此这里必须跳过
+     * 被「未撤销的 DELETE_ITEM 快照」引用过的 stored_name，否则重启后清理会把文件删掉，
+     * 撤销时元数据虽然恢复但图片会 404。
      */
     public int purgeOrphanFiles() {
         try (java.util.stream.Stream<Path> walk = Files.walk(root)) {
@@ -116,6 +125,7 @@ public class AttachmentService {
                 Object name = row.get("stored_name");
                 if (name != null) referenced.add(String.valueOf(name));
             }
+            referenced.addAll(pendingUndoAttachmentNames());
             int[] counter = {0};
             walk.filter(Files::isRegularFile).forEach(path -> {
                 String rel = root.relativize(path).toString().replace('\\', '/');
@@ -130,6 +140,32 @@ public class AttachmentService {
                 .warn("purgeOrphanFiles failed: {}", ex.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * 收集所有「未撤销的 DELETE_ITEM」历史快照中 _attachments 引用的 stored_name。
+     * 这些文件虽然 DB 元数据已被级联删除，但仍是撤销的依据，不能当作孤儿清理。
+     */
+    private java.util.Set<String> pendingUndoAttachmentNames() {
+        java.util.Set<String> names = new java.util.HashSet<>();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+            "SELECT before_json FROM operation_history WHERE action_type = 'DELETE_ITEM' AND undone_at IS NULL AND before_json IS NOT NULL");
+        for (Map<String, Object> row : rows) {
+            Object raw = row.get("before_json");
+            if (raw == null) continue;
+            try {
+                JsonNode attachments = objectMapper.readTree(String.valueOf(raw)).path("_attachments");
+                if (attachments.isArray()) {
+                    for (JsonNode item : attachments) {
+                        JsonNode stored = item.path("stored_name");
+                        if (stored.isTextual() && !stored.asText().isBlank()) names.add(stored.asText());
+                    }
+                }
+            } catch (Exception ignored) {
+                // 快照损坏时保守跳过该条，不影响其它引用
+            }
+        }
+        return names;
     }
 
     private static String sanitizeFilename(String value) {

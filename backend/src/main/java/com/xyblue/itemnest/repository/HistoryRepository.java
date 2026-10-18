@@ -15,13 +15,11 @@ public class HistoryRepository {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final InventoryRepository inventory;
-    private final LifecycleRepository lifecycle;
 
-    public HistoryRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, InventoryRepository inventory, LifecycleRepository lifecycle) {
+    public HistoryRepository(JdbcTemplate jdbc, ObjectMapper objectMapper, InventoryRepository inventory) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.inventory = inventory;
-        this.lifecycle = lifecycle;
     }
 
     public long record(String actionType, String entityType, Long entityId, Long itemId, Long containerId,
@@ -71,27 +69,10 @@ public class HistoryRepository {
             case "item" -> undoItem(action, before, after);
             case "container" -> undoContainer(action, before, after);
             case "batch" -> undoBatch(action, before);
-            case "lifecycle" -> undoLifecycle(action, h, before);
             default -> throw new IllegalArgumentException("该记录暂不支持撤销");
         }
         jdbc.update("UPDATE operation_history SET undone_at = CURRENT_TIMESTAMP WHERE id = ?", historyId);
         return get(historyId);
-    }
-
-
-    private void undoLifecycle(String action, Map<String, Object> historyRow, Map<String, Object> before) {
-        long itemId = InventoryRepository.number(historyRow.get("item_id")).longValue();
-        if (inventory.getItem(itemId) == null) throw new IllegalArgumentException("物品已不存在，无法恢复生命周期");
-        if (action.equals("DELETE_LIFECYCLE")) {
-            if (before.isEmpty()) throw new IllegalArgumentException("缺少生命周期快照");
-            lifecycle.upsert(itemId, before);
-            return;
-        }
-        if (action.equals("UPDATE_LIFECYCLE")) {
-            if (before.isEmpty()) lifecycle.delete(itemId); else lifecycle.upsert(itemId, before);
-            return;
-        }
-        throw new IllegalArgumentException("该生命周期记录暂不支持撤销");
     }
 
     private void undoItem(String action, Map<String, Object> before, Map<String, Object> after) {
@@ -156,15 +137,6 @@ public class HistoryRepository {
             before.getOrDefault("notes", ""), before.getOrDefault("tags", ""),
             before.getOrDefault("created_at", nowLiteral()), before.getOrDefault("updated_at", nowLiteral()));
         inventory.refreshFtsForItem(id);
-        if (before.get("lifecycle_type") != null || before.get("expiry_date") != null) {
-            Map<String, Object> life = new LinkedHashMap<>();
-            life.put("lifecycle_type", before.getOrDefault("lifecycle_type", "EXPIRY"));
-            life.put("start_date", before.get("lifecycle_start_date"));
-            life.put("expiry_date", before.get("expiry_date"));
-            life.put("remind_days", before.getOrDefault("remind_days", 7));
-            life.put("notes", before.getOrDefault("lifecycle_notes", ""));
-            lifecycle.upsert(id, life);
-        }
         Object rawAttachments = before.get("_attachments");
         if (rawAttachments instanceof List<?> list) {
             for (Object obj : list) if (obj instanceof Map<?, ?> raw) {
