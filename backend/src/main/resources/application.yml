@@ -22,6 +22,9 @@ myhouse:
   # 外网/反向代理也必须配置；配置后本机请求同样需要认证。旧变量仍兼容。
   lan-token: ${MYHOUSE_ACCESS_TOKEN:${MYHOUSE_LAN_TOKEN:}}
   require-auth: ${MYHOUSE_REQUIRE_AUTH:false}
+  # 可选的家庭账号登录（连接页用账号密码换访问密钥）。仅在数据目录没有 account.json 时生效。
+  auth-username: ${MYHOUSE_AUTH_USERNAME:}
+  auth-password: ${MYHOUSE_AUTH_PASSWORD:}
   rabbitmq:
     enabled: ${MYHOUSE_RABBITMQ_ENABLED:false}
     url: ${MYHOUSE_RABBITMQ_URL:amqp://guest:guest@127.0.0.1/}

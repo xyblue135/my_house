@@ -63,6 +63,11 @@ public class LanAuthFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
+        // 登录端点免鉴权：它用家庭账号密码换取访问密钥（账号错误时控制器内部返回 401 并带延迟）。
+        if ("/api/auth/login".equals(path)) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         response.setHeader("Cache-Control", "no-store");
         response.setHeader("Referrer-Policy", "no-referrer");

@@ -51,6 +51,8 @@ export interface ApiOptions extends Omit<RequestInit, 'signal'> {
   timeoutMs?: number
   /** 用于取消请求；例如切换视图时统一 abort。 */
   signal?: AbortSignal
+  /** 允许在未连接状态下发送写请求（仅连接页的登录接口使用）。 */
+  allowUnconnected?: boolean
 }
 
 export class ApiError extends Error {
@@ -72,10 +74,10 @@ const inFlight = new Map<string, Promise<unknown>>()
  *   减少 dashboard/items 反复拉取。
  */
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { timeoutMs = 15000, signal, ...init } = options
+  const { timeoutMs = 15000, signal, allowUnconnected, ...init } = options
   const method = (init.method || 'GET').toUpperCase()
   const writing = !['GET', 'HEAD', 'OPTIONS'].includes(method)
-  if (writing && connection.status !== 'online') {
+  if (writing && connection.status !== 'online' && !allowUnconnected) {
     throw new ApiError('尚未连接服务器，暂时无法保存。请先重新连接。', 0)
   }
   const headers = new Headers(init.headers)
