@@ -492,11 +492,13 @@ onBeforeUnmount(() => {
   <TresGridHelper :args="[room, room, '#bcc9bd', '#d7e0d5']" :position="[0, 0.01, 0]" />
 
   <template v-for="box in rendered" :key="box.id">
+    <!-- TresJS v5 只认 onPointerenter/onPointerleave（原生事件名，小写 e）；
+         写成 @pointer-enter 会落到未知属性赋值路径，触发 Vue 递归更新导致页面卡死 -->
     <TresMesh
       :position="[box.x, box.y + box.h / 2, box.z]"
       @click="onBoxClick(box.id)"
-      @pointer-enter="emit('hover', box.id)"
-      @pointer-leave="emit('hover', null)"
+      @pointerenter="emit('hover', box.id)"
+      @pointerleave="emit('hover', null)"
     >
       <TresBoxGeometry :args="[box.w, box.h, box.d]" />
       <TresMeshStandardMaterial :ref="(el: unknown) => registerMaterial(box.id, el)" />
