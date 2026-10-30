@@ -55,7 +55,20 @@ function Invoke-Frontend([string[]]$CommandArgs) {
     } finally { Pop-Location }
 }
 
+function Stop-RunningJarInstances {
+    # Windows 会锁定正在运行的 JAR 文件；重建或重启前先停掉本仓库启动的 Java 实例，
+    # 避免 clean 删除 jar 时报「另一个程序正在使用此文件」。只按 jar 名匹配，不动其它 Java 进程。
+    $stale = Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'myhouse-1\.0\.0\.jar|itemnest-1\.0\.0\.jar' }
+    foreach ($process in @($stale)) {
+        Write-Host "[My House] Stopping running JAR instance (pid $($process.ProcessId)) before rebuild."
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    if (@($stale).Count -gt 0) { Start-Sleep -Milliseconds 800 }
+}
+
 function Invoke-BackendBuild([switch]$SkipTests) {
+    Stop-RunningJarInstances
     Push-Location (Join-Path $repoRoot 'backend')
     try {
         $mavenArgs = @('clean', 'package')
@@ -158,7 +171,11 @@ try {
     $port = 0
     if (-not [int]::TryParse($env:SERVER_PORT, [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw 'SERVER_PORT must be an integer between 1 and 65535.' }
     if (-not $env:MYHOUSE_BIND_ADDRESS) { $env:MYHOUSE_BIND_ADDRESS = '127.0.0.1' }
-    if ($Mode -ne 'worker') { Assert-FreePort $port }
+    if ($Mode -ne 'worker') {
+        # 重复运行 start.bat 时把上一次的实例停掉，当作一次干净的重启，而不是端口冲突报错。
+        Stop-RunningJarInstances
+        Assert-FreePort $port
+    }
     if ($Mode -eq 'dev') {
         if ($port -ne 8765 -or $env:MYHOUSE_BIND_ADDRESS -ne '127.0.0.1') { throw 'Dev mode requires SERVER_PORT=8765 and MYHOUSE_BIND_ADDRESS=127.0.0.1 to match the Vite proxy.' }
         Assert-FreePort 15473
