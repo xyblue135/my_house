@@ -71,7 +71,7 @@ const selectedId = ref<number | null>(null)
 const hoveredId = ref<number | null>(null)
 
 // ---- 显示选项：名字标签大小、右侧面板显隐 ----
-const LABEL_SCALE_KEY = 'itemnest.spaceLabelScale'
+const LABEL_SCALE_KEY = 'myhouse.spaceLabelScale'
 const labelScale = ref(Number(localStorage.getItem(LABEL_SCALE_KEY)) || 1)
 function changeLabelScale(delta: number) {
   const next = Math.min(4, Math.max(0.4, Math.round((labelScale.value + delta) * 100) / 100))

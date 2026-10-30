@@ -1,10 +1,10 @@
 server:
-  address: ${ITEMNEST_BIND_ADDRESS:127.0.0.1}
+  address: ${MYHOUSE_BIND_ADDRESS:127.0.0.1}
   port: ${SERVER_PORT:8765}
 
 spring:
   application:
-    name: itemnest
+    name: myhouse
   jackson:
     default-property-inclusion: non_null
   web:
@@ -17,21 +17,21 @@ spring:
       max-file-size: 20MB
       max-request-size: 25MB
 
-itemnest:
-  data-dir: ${ITEMNEST_DATA_DIR:../data}
+myhouse:
+  data-dir: ${MYHOUSE_DATA_DIR:../data}
   # 外网/反向代理也必须配置；配置后本机请求同样需要认证。旧变量仍兼容。
-  lan-token: ${ITEMNEST_ACCESS_TOKEN:${ITEMNEST_LAN_TOKEN:}}
-  require-auth: ${ITEMNEST_REQUIRE_AUTH:false}
+  lan-token: ${MYHOUSE_ACCESS_TOKEN:${MYHOUSE_LAN_TOKEN:}}
+  require-auth: ${MYHOUSE_REQUIRE_AUTH:false}
   rabbitmq:
-    enabled: ${ITEMNEST_RABBITMQ_ENABLED:false}
-    url: ${ITEMNEST_RABBITMQ_URL:amqp://guest:guest@127.0.0.1/}
-    exchange: ${ITEMNEST_RABBITMQ_EXCHANGE:itemnest.events}
-    queue: ${ITEMNEST_RABBITMQ_QUEUE:itemnest.inventory.events}
-    worker-enabled: ${ITEMNEST_RABBITMQ_WORKER_ENABLED:false}
+    enabled: ${MYHOUSE_RABBITMQ_ENABLED:false}
+    url: ${MYHOUSE_RABBITMQ_URL:amqp://guest:guest@127.0.0.1/}
+    exchange: ${MYHOUSE_RABBITMQ_EXCHANGE:myhouse.events}
+    queue: ${MYHOUSE_RABBITMQ_QUEUE:myhouse.inventory.events}
+    worker-enabled: ${MYHOUSE_RABBITMQ_WORKER_ENABLED:false}
 
 logging:
   level:
-    com.xyblue.itemnest: INFO
+    com.xyblue.myhouse: INFO
     # 需要排查时可临时打开：
-    # com.xyblue.itemnest.repository: DEBUG
-    # com.xyblue.itemnest.service: DEBUG
+    # com.xyblue.myhouse.repository: DEBUG
+    # com.xyblue.myhouse.service: DEBUG

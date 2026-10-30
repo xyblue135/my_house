@@ -1,4 +1,4 @@
-const CACHE = 'itemnest-online-v3'
+const CACHE = 'myhouse-online-v3'
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', event => {
@@ -7,7 +7,7 @@ self.addEventListener('install', event => {
 })
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('itemnest-') && key !== CACHE).map(key => caches.delete(key)))))
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('myhouse-') && key !== CACHE).map(key => caches.delete(key)))))
   self.clients.claim()
 })
 

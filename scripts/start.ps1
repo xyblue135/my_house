@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$jarPath = Join-Path $repoRoot 'backend\target\itemnest-1.0.0.jar'
+$jarPath = Join-Path $repoRoot 'backend\target\myhouse-1.0.0.jar'
 $buildStampPath = Join-Path $repoRoot 'backend\target\source-hash.txt'
 $children = @()
 
@@ -33,7 +33,7 @@ function Use-Java {
                 $env:JAVA_HOME = Split-Path -Parent (Split-Path -Parent $candidate)
                 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
                 $script:javaExe = $candidate
-                Write-Host "[ItemNest] Java: $candidate"
+                Write-Host "[My House] Java: $candidate"
                 return
             }
         } finally { $probe.Dispose() }
@@ -100,23 +100,23 @@ function Build-App {
     Invoke-Frontend @('build')
     Invoke-BackendBuild
     Set-Content -LiteralPath $buildStampPath -Value $sourceHash -Encoding UTF8
-    Write-Host "[ItemNest] Build completed: $jarPath"
+    Write-Host "[My House] Build completed: $jarPath"
 }
 
 function Assert-FreePort([int]$Port) {
     if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
-        throw "Port $Port is already in use. Stop the existing service before starting ItemNest."
+        throw "Port $Port is already in use. Stop the existing service before starting My House."
     }
 }
 
 function Start-Child([string]$Name, [string]$File, [string]$Arguments, [string]$Directory) {
-    $logDir = Join-Path $env:ITEMNEST_DATA_DIR 'logs'
+    $logDir = Join-Path $env:MYHOUSE_DATA_DIR 'logs'
     $null = New-Item -ItemType Directory -Force -Path $logDir
     $logBase = Join-Path $logDir ("$Name-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$PID")
     $process = Start-Process -FilePath $File -ArgumentList $Arguments -WorkingDirectory $Directory -WindowStyle Hidden -RedirectStandardOutput "$logBase.log" -RedirectStandardError "$logBase.error.log" -PassThru
     $script:children += $process
-    Write-Host "[ItemNest] $Name log: $logBase.log"
-    Write-Host "[ItemNest] $Name errors: $logBase.error.log"
+    Write-Host "[My House] $Name log: $logBase.log"
+    Write-Host "[My House] $Name errors: $logBase.error.log"
     return $process
 }
 
@@ -152,21 +152,21 @@ try {
     Use-Java
     if ($Mode -eq 'build') { Build-App; exit 0 }
 
-    if (-not $env:ITEMNEST_DATA_DIR) { $env:ITEMNEST_DATA_DIR = Join-Path $repoRoot 'data' }
-    if (-not [System.IO.Path]::IsPathRooted($env:ITEMNEST_DATA_DIR)) { $env:ITEMNEST_DATA_DIR = Join-Path $repoRoot $env:ITEMNEST_DATA_DIR }
+    if (-not $env:MYHOUSE_DATA_DIR) { $env:MYHOUSE_DATA_DIR = Join-Path $repoRoot 'data' }
+    if (-not [System.IO.Path]::IsPathRooted($env:MYHOUSE_DATA_DIR)) { $env:MYHOUSE_DATA_DIR = Join-Path $repoRoot $env:MYHOUSE_DATA_DIR }
     if (-not $env:SERVER_PORT) { $env:SERVER_PORT = '8765' }
     $port = 0
     if (-not [int]::TryParse($env:SERVER_PORT, [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw 'SERVER_PORT must be an integer between 1 and 65535.' }
-    if (-not $env:ITEMNEST_BIND_ADDRESS) { $env:ITEMNEST_BIND_ADDRESS = '127.0.0.1' }
+    if (-not $env:MYHOUSE_BIND_ADDRESS) { $env:MYHOUSE_BIND_ADDRESS = '127.0.0.1' }
     if ($Mode -ne 'worker') { Assert-FreePort $port }
     if ($Mode -eq 'dev') {
-        if ($port -ne 8765 -or $env:ITEMNEST_BIND_ADDRESS -ne '127.0.0.1') { throw 'Dev mode requires SERVER_PORT=8765 and ITEMNEST_BIND_ADDRESS=127.0.0.1 to match the Vite proxy.' }
+        if ($port -ne 8765 -or $env:MYHOUSE_BIND_ADDRESS -ne '127.0.0.1') { throw 'Dev mode requires SERVER_PORT=8765 and MYHOUSE_BIND_ADDRESS=127.0.0.1 to match the Vite proxy.' }
         Assert-FreePort 15473
         Use-Pnpm
         Invoke-Frontend @('install', '--frozen-lockfile')
         Invoke-BackendBuild -SkipTests
     } elseif ($Mode -eq 'rebuild' -or -not (Test-BuildCurrent)) {
-        Write-Host '[ItemNest] Building the current source before starting.'
+        Write-Host '[My House] Building the current source before starting.'
         Build-App
     }
 
@@ -174,27 +174,27 @@ try {
     # dev 模式保持回环（Vite 代理固定 127.0.0.1），worker 不监听网络。
     $lanMode = $Mode -eq 'lan' -or $Mode -eq 'start' -or $Mode -eq 'rebuild'
     if ($lanMode) {
-        $env:ITEMNEST_BIND_ADDRESS = '0.0.0.0'
-        if (-not $env:ITEMNEST_ACCESS_TOKEN) { $env:ITEMNEST_ACCESS_TOKEN = $env:ITEMNEST_LAN_TOKEN }
-        if (-not $env:ITEMNEST_ACCESS_TOKEN) {
-            $env:ITEMNEST_ACCESS_TOKEN = & (Join-Path $PSScriptRoot 'get-access-token.ps1') -DataDir $env:ITEMNEST_DATA_DIR
-            Write-Host ('[ItemNest] Access key file: ' + (Join-Path $env:ITEMNEST_DATA_DIR 'access-token.txt'))
-        } else { Write-Host '[ItemNest] Using the access key configured in the environment.' }
-        $env:ITEMNEST_REQUIRE_AUTH = 'true'
-        Write-Host '[ItemNest] LAN mode requires an access key, including on this computer. Use HTTPS for public access.'
-        Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | ForEach-Object { Write-Host "[ItemNest] LAN URL: http://$($_.IPAddress):$port" }
+        $env:MYHOUSE_BIND_ADDRESS = '0.0.0.0'
+        if (-not $env:MYHOUSE_ACCESS_TOKEN) { $env:MYHOUSE_ACCESS_TOKEN = $env:MYHOUSE_LAN_TOKEN }
+        if (-not $env:MYHOUSE_ACCESS_TOKEN) {
+            $env:MYHOUSE_ACCESS_TOKEN = & (Join-Path $PSScriptRoot 'get-access-token.ps1') -DataDir $env:MYHOUSE_DATA_DIR
+            Write-Host ('[My House] Access key file: ' + (Join-Path $env:MYHOUSE_DATA_DIR 'access-token.txt'))
+        } else { Write-Host '[My House] Using the access key configured in the environment.' }
+        $env:MYHOUSE_REQUIRE_AUTH = 'true'
+        Write-Host '[My House] LAN mode requires an access key, including on this computer. Use HTTPS for public access.'
+        Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | ForEach-Object { Write-Host "[My House] LAN URL: http://$($_.IPAddress):$port" }
     }
 
     $javaArgs = '-jar "' + $jarPath + '"'
     if ($Mode -eq 'worker') {
-        $env:ITEMNEST_RABBITMQ_ENABLED = 'true'
-        $env:ITEMNEST_RABBITMQ_WORKER_ENABLED = 'true'
+        $env:MYHOUSE_RABBITMQ_ENABLED = 'true'
+        $env:MYHOUSE_RABBITMQ_WORKER_ENABLED = 'true'
         $javaArgs += ' --spring.main.web-application-type=none'
     }
     $backend = Start-Child 'backend' $script:javaExe $javaArgs $repoRoot
-    Write-Host "[ItemNest] Data: $env:ITEMNEST_DATA_DIR"
+    Write-Host "[My House] Data: $env:MYHOUSE_DATA_DIR"
     if ($Mode -ne 'worker') {
-        $connectHost = $env:ITEMNEST_BIND_ADDRESS
+        $connectHost = $env:MYHOUSE_BIND_ADDRESS
         if ($connectHost -eq '0.0.0.0') { $connectHost = '127.0.0.1' }
         if ($connectHost -eq '::') { $connectHost = '::1' }
         Wait-Port $port $backend $connectHost
@@ -209,10 +209,10 @@ try {
             Wait-Port 15473 $frontend '127.0.0.1'
             $url = 'http://127.0.0.1:15473'
         }
-        Write-Host "[ItemNest] URL: $url"
+        Write-Host "[My House] URL: $url"
         if (-not $NoBrowser) { Start-Process $url }
     }
-    Write-Host '[ItemNest] Press Ctrl+C to stop. Child services will be stopped together.'
+    Write-Host '[My House] Press Ctrl+C to stop. Child services will be stopped together.'
     while ($true) {
         foreach ($child in $children) {
             if ($child.HasExited) { throw "Service exited with code $($child.ExitCode). Check its log files." }
@@ -220,7 +220,7 @@ try {
         Start-Sleep -Milliseconds 500
     }
 } catch {
-    Write-Host "[ItemNest] $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[My House] $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 } finally {
     foreach ($child in $children) {

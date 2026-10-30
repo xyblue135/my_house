@@ -17,7 +17,7 @@ export interface AppStore {
   setOwner: (id: number) => void
 }
 
-const KEY: InjectionKey<AppStore> = Symbol('itemnest.store')
+const KEY: InjectionKey<AppStore> = Symbol('myhouse.store')
 
 export function createAppStore(): AppStore {
   return reactive<AppStore>({

@@ -38,9 +38,9 @@ function connect() {
   <div class="connection-gate" role="dialog" aria-modal="true" aria-labelledby="connection-title">
     <section class="connection-card">
       <div class="brand-mark"><AppIcon name="box" :size="27" /></div>
-      <p class="connection-brand">物栈 · ItemNest</p>
+      <p class="connection-brand">我的家 · My House</p>
       <h1 id="connection-title">{{ title }}</h1>
-      <p role="status">{{ connection.message || '连接成功后即可使用物栈。' }}</p>
+      <p role="status">{{ connection.message || '连接成功后即可使用我的家。' }}</p>
       <p class="muted">物品和照片统一保存在服务器。连接后，就能和家人一起查找与整理。</p>
       <form @submit.prevent="connect">
         <label

@@ -1,4 +1,4 @@
-# 物栈 ItemNest
+# 我的家 My House
 
 家庭物品、房间和菜谱管理。Vue 3 + TypeScript + Spring Boot + SQLite。
 
@@ -29,7 +29,7 @@ cd ../backend
 .\mvnw.cmd clean package
 ```
 
-整合 JAR：`backend/target/itemnest-1.0.0.jar`，其中包含构建后的网页。
+整合 JAR：`backend/target/myhouse-1.0.0.jar`，其中包含构建后的网页。
 
 | 入口 | 用途 |
 | --- | --- |
@@ -49,7 +49,7 @@ Windows 根目录只保留 `start.bat`，共用逻辑在 `scripts/start.ps1`。�
 - Java 服务默认地址：`http://127.0.0.1:8765`。
 - Vite 开发地址：`http://127.0.0.1:15473`，将 `/api` 代理到 Java 服务。
 - `.env.example` 只是配置参考，不会自动载入；需要设置环境变量，或使用 systemd 的 `EnvironmentFile`。
-- 测试时将 `ITEMNEST_DATA_DIR` 指向独立目录，避免写入家庭数据。
+- 测试时将 `MYHOUSE_DATA_DIR` 指向独立目录，避免写入家庭数据。
 
 ## 代码组织与客户端
 
@@ -116,13 +116,13 @@ data/
 
 IPv6 既需要应用正确处理 URL，也需要 DNS、监听和网络真正可达。有条件时同时配置 A 和 AAAA，兼容仅支持 IPv4 的网络。
 
-1. 构建前端和后端，将整合 JAR 上传为 `/opt/itemnest/itemnest.jar`。服务器需要 Java 21，无需 Node.js。
-2. 创建专用 `itemnest` 系统用户，将 [systemd 配置](deploy/itemnest.service) 放入 `/etc/systemd/system/`。
-3. 将 [环境变量示例](deploy/server.env.example) 复制到 `/etc/itemnest/server.env`，用 `openssl rand -hex 32` 生成密钥，填写 `ITEMNEST_ACCESS_TOKEN` 并限制文件读取权限。保留 `ITEMNEST_REQUIRE_AUTH=true`。
-4. 停止旧服务，备份并复制完整数据目录到 `/var/lib/itemnest/`，将目录归属设为 `itemnest`。不要让多台服务器共享写入同一个 SQLite 文件。
+1. 构建前端和后端，将整合 JAR 上传为 `/opt/myhouse/myhouse.jar`。服务器需要 Java 21，无需 Node.js。
+2. 创建专用 `myhouse` 系统用户，将 [systemd 配置](deploy/myhouse.service) 放入 `/etc/systemd/system/`。
+3. 将 [环境变量示例](deploy/server.env.example) 复制到 `/etc/myhouse/server.env`，用 `openssl rand -hex 32` 生成密钥，填写 `MYHOUSE_ACCESS_TOKEN` 并限制文件读取权限。保留 `MYHOUSE_REQUIRE_AUTH=true`。
+4. 停止旧服务，备份并复制完整数据目录到 `/var/lib/myhouse/`，将目录归属设为 `myhouse`。不要让多台服务器共享写入同一个 SQLite 文件。
 5. 安装 Caddy，将 [站点配置](deploy/Caddyfile) 中的 `items.example.com` 替换为实际域名，放入 `/etc/caddy/Caddyfile`。已有站点时合并该站点块。
 6. DNS 的 A 指向公网 IPv4，AAAA 指向稳定的公网 IPv6。云安全组、系统防火墙和路由器允许对应地址族的 TCP 80/443；Java 的 8765 端口只监听回环。
-7. 执行 `systemctl daemon-reload` 和 `systemctl enable --now itemnest`。通过 `caddy validate --config /etc/caddy/Caddyfile` 检查后 reload Caddy。Caddy 为有效域名申请和续期证书，见 [HTTPS 官方说明](https://caddyserver.com/docs/automatic-https)。
+7. 执行 `systemctl daemon-reload` 和 `systemctl enable --now myhouse`。通过 `caddy validate --config /etc/caddy/Caddyfile` 检查后 reload Caddy。Caddy 为有效域名申请和续期证书，见 [HTTPS 官方说明](https://caddyserver.com/docs/automatic-https)。
 
 在服务器以外、分别具备 IPv4 / IPv6 的网络检查：
 
@@ -130,16 +130,16 @@ IPv6 既需要应用正确处理 URL，也需要 DNS、监听和网络真正可�
 # 无密钥应返回 401。
 curl -4 -i https://你的域名/api/connection
 curl -6 -i https://你的域名/api/connection
-# 带密钥应返回 service=itemnest、api_version=1、status=ok。
-curl -4 -H "Authorization: Bearer $ITEMNEST_ACCESS_TOKEN" https://你的域名/api/connection
-curl -6 -H "Authorization: Bearer $ITEMNEST_ACCESS_TOKEN" https://你的域名/api/connection
+# 带密钥应返回 service=myhouse、api_version=1、status=ok。
+curl -4 -H "Authorization: Bearer $MYHOUSE_ACCESS_TOKEN" https://你的域名/api/connection
+curl -6 -H "Authorization: Bearer $MYHOUSE_ACCESS_TOKEN" https://你的域名/api/connection
 ```
 
-Java 直接监听 IPv6 可设 `ITEMNEST_BIND_ADDRESS=::`；能否同时接收 IPv4 取决于 JVM 与操作系统，需要实测。生产优先由 Caddy 处理公网双栈和 TLS。
+Java 直接监听 IPv6 可设 `MYHOUSE_BIND_ADDRESS=::`；能否同时接收 IPv4 取决于 JVM 与操作系统，需要实测。生产优先由 Caddy 处理公网双栈和 TLS。
 
 ### 访问边界
 
-- 本机开发可不配置密钥。设置 `ITEMNEST_ACCESS_TOKEN` 后，本机和远程 API 均需认证；旧名 `ITEMNEST_LAN_TOKEN` 仍兼容。公开监听缺少密钥时拒绝启动，公网密钥至少 32 位。
+- 本机开发可不配置密钥。设置 `MYHOUSE_ACCESS_TOKEN` 后，本机和远程 API 均需认证；旧名 `MYHOUSE_LAN_TOKEN` 仍兼容。公开监听缺少密钥时拒绝启动，公网密钥至少 32 位。
 - 家庭共享密钥具有完整读写与删除权限；房间只是物品归属分类，不是独立账号权限。不适合直接开放给互不信任的多个家庭。
 - 一般 API 使用 Bearer 请求头。媒体内容为兼容浏览器标签使用查询密钥，并设置 `no-store`、`no-referrer`；自建访问日志需屏蔽查询字符串和认证头。
 - 密钥保存在设备应用存储中，Android 禁止系统应用备份。轮换共享密钥后，各设备需重新输入。

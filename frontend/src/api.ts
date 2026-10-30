@@ -8,9 +8,9 @@ export const connection = reactive({
 })
 
 const buildApiBase = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-let runtimeApiBase = localStorage.getItem('itemnest.apiBase')?.replace(/\/$/, '') ?? buildApiBase
+let runtimeApiBase = localStorage.getItem('myhouse.apiBase')?.replace(/\/$/, '') ?? buildApiBase
 // 局域网 token：和后端 LanAuthFilter 配套；只在用户主动设置后保存。
-let runtimeLanToken: string | null = localStorage.getItem('itemnest.lanToken') || null
+let runtimeLanToken: string | null = localStorage.getItem('myhouse.lanToken') || null
 
 export function apiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`
@@ -24,15 +24,15 @@ export function setApiBase(value: string): void {
     throw new Error('App 请使用 HTTPS 服务地址')
   }
   runtimeApiBase = normalized
-  if (runtimeApiBase) localStorage.setItem('itemnest.apiBase', runtimeApiBase)
-  else localStorage.removeItem('itemnest.apiBase')
+  if (runtimeApiBase) localStorage.setItem('myhouse.apiBase', runtimeApiBase)
+  else localStorage.removeItem('myhouse.apiBase')
 }
 
 export function getLanToken(): string | null { return runtimeLanToken }
 export function setLanToken(value: string | null): void {
   runtimeLanToken = value && value.trim() ? value.trim() : null
-  if (runtimeLanToken) localStorage.setItem('itemnest.lanToken', runtimeLanToken)
-  else localStorage.removeItem('itemnest.lanToken')
+  if (runtimeLanToken) localStorage.setItem('myhouse.lanToken', runtimeLanToken)
+  else localStorage.removeItem('myhouse.lanToken')
 }
 
 /**
@@ -123,7 +123,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
       const type = response.headers.get('content-type') || ''
       if (!type.includes('application/json')) {
         connection.status = 'offline'
-        connection.message = '该地址没有返回物栈数据，请检查服务地址和代理配置。'
+        connection.message = '该地址没有返回我的家数据，请检查服务地址和代理配置。'
         throw new ApiError(connection.message, 0)
       }
       return (await response.json()) as T
@@ -166,7 +166,7 @@ export async function checkConnection(): Promise<void> {
       throw new Error('App 请使用 HTTPS 服务地址')
     }
     const result = await api<{ service: string; status: string; api_version: number }>('/api/connection', { timeoutMs: 8000 })
-    if (result?.service !== 'itemnest' || result.status !== 'ok' || result.api_version !== 1) {
+    if (result?.service !== 'myhouse' || result.status !== 'ok' || result.api_version !== 1) {
       throw new Error('服务地址不正确，或服务器需要更新。')
     }
     connection.status = 'online'

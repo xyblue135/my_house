@@ -12,7 +12,7 @@ export interface FeatureToggles {
   collision: boolean
 }
 
-const STORAGE_KEY = 'itemnest.features'
+const STORAGE_KEY = 'myhouse.features'
 /** 存储版本号：用于在默认值变更后丢弃旧的缓存值。 */
 const STORAGE_VERSION = 2
 

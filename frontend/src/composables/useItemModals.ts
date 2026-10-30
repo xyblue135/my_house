@@ -55,7 +55,7 @@ export interface ItemModals {
   onCropCancel: () => void
 }
 
-const KEY: InjectionKey<ItemModals> = Symbol('itemnest.modals')
+const KEY: InjectionKey<ItemModals> = Symbol('myhouse.modals')
 
 export function provideItemModals(modals: ItemModals): void {
   provide(KEY, modals)

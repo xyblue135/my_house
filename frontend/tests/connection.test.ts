@@ -40,7 +40,7 @@ describe('online-only writes', () => {
     const { api, setApiBase, setLanToken, checkConnection, connection } = await import('../src/api')
     setApiBase('https://[2001:db8::1]:8443')
     setLanToken('test-key')
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ service: 'itemnest', status: 'ok', api_version: 1 }))
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ service: 'myhouse', status: 'ok', api_version: 1 }))
     await checkConnection()
     expect(connection.status).toBe('online')
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe('https://[2001:db8::1]:8443/api/connection')
@@ -66,7 +66,7 @@ describe('online-only writes', () => {
   it('rejects a proxy login page instead of treating HTML as data', async () => {
     const { checkConnection, connection } = await import('../src/api')
     vi.mocked(fetch).mockResolvedValue(new Response('<html>Login</html>', { headers: { 'Content-Type': 'text/html' } }))
-    await expect(checkConnection()).rejects.toThrow('没有返回物栈数据')
+    await expect(checkConnection()).rejects.toThrow('没有返回我的家数据')
     expect(connection.status).toBe('offline')
   })
   it('native first launch needs an HTTPS server; it cannot use the bundled localhost', async () => {

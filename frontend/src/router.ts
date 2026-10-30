@@ -15,5 +15,5 @@ export const router = createRouter({
 })
 
 router.afterEach((to) => {
-  if (to.meta?.title) document.title = `ItemNest · ${to.meta.title as string}`
+  if (to.meta?.title) document.title = `My House · ${to.meta.title as string}`
 })
