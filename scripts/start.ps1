@@ -140,11 +140,11 @@ Push-Location $repoRoot
 try {
     if ($Mode -eq 'help') {
         Write-Host 'Usage: start.bat [start|build|rebuild|dev|lan|worker|help] [-NoBrowser]'
-        Write-Host '  start    Start local web app (default); rebuild if missing or sources changed.'
+        Write-Host '  start    Start the web app on the LAN (default); reuse or create an access key.'
         Write-Host '  build    Build frontend and backend, including backend tests.'
-        Write-Host '  rebuild  Build, then start local web app.'
-        Write-Host '  dev      Build backend, then run backend + Vite with hot reload.'
-        Write-Host '  lan      Start authenticated LAN web access; reuse or create an access key.'
+        Write-Host '  rebuild  Build, then start the web app on the LAN.'
+        Write-Host '  dev      Build backend, then run backend + Vite with hot reload (loopback only).'
+        Write-Host '  lan      Same as start: authenticated LAN web access.'
         Write-Host '  worker   Run the existing RabbitMQ event consumer, without a web server.'
         Write-Host '  -NoBrowser  Start without opening the browser.'
         exit 0
@@ -170,7 +170,10 @@ try {
         Build-App
     }
 
-    if ($Mode -eq 'lan') {
+    # 默认启动即对局域网开放：绑定 0.0.0.0 并自动复用/生成访问密钥。
+    # dev 模式保持回环（Vite 代理固定 127.0.0.1），worker 不监听网络。
+    $lanMode = $Mode -eq 'lan' -or $Mode -eq 'start' -or $Mode -eq 'rebuild'
+    if ($lanMode) {
         $env:ITEMNEST_BIND_ADDRESS = '0.0.0.0'
         if (-not $env:ITEMNEST_ACCESS_TOKEN) { $env:ITEMNEST_ACCESS_TOKEN = $env:ITEMNEST_LAN_TOKEN }
         if (-not $env:ITEMNEST_ACCESS_TOKEN) {

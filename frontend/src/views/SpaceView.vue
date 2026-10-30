@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useAppStore } from '../store'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
+import { features } from '../composables/useFeatureToggles'
 import type { Container, Item, SpaceBox } from '../types'
 
 // 房间 16x16 格；1 格 ≈ 50cm。
@@ -69,6 +70,31 @@ const autoLayout = computed(() => {
 const selectedId = ref<number | null>(null)
 const hoveredId = ref<number | null>(null)
 
+// ---- 显示选项：名字标签大小、右侧面板显隐 ----
+const LABEL_SCALE_KEY = 'itemnest.spaceLabelScale'
+const labelScale = ref(Number(localStorage.getItem(LABEL_SCALE_KEY)) || 1)
+function changeLabelScale(delta: number) {
+  const next = Math.min(4, Math.max(0.4, Math.round((labelScale.value + delta) * 100) / 100))
+  labelScale.value = next
+  localStorage.setItem(LABEL_SCALE_KEY, String(next))
+}
+const panelOpen = ref(true)
+function toggleCover() {
+  features.boxCover = !features.boxCover
+}
+
+/** 实体碰撞：目标平面与其它箱子底面矩形相交即冲突。 */
+function findCollision(box: { id: number; x: number; z: number; w: number; d: number }): SpaceBox | null {
+  if (!features.collision) return null
+  const eps = 0.05
+  for (const other of displayBoxes.value) {
+    if (other.id === box.id) continue
+    if (Math.abs(box.x - other.x) < (box.w + other.w) / 2 - eps &&
+        Math.abs(box.z - other.z) < (box.d + other.d) / 2 - eps) return other
+  }
+  return null
+}
+
 const displayBoxes = computed<SpaceBox[]>(() =>
   ownerContainers.value.map((c) => {
     const placed = isPlaced(c)
@@ -85,16 +111,17 @@ const displayBoxes = computed<SpaceBox[]>(() =>
       itemCount: c.item_count,
       highlighted: false,
       selected: false,
+      coverId: c.cover_attachment_id ?? null,
     }
   }).map((box) => ({
     ...box,
     highlighted: highlightIds.value.has(box.id),
     selected: box.id === selectedId.value,
+    hovered: box.id === hoveredId.value,
   })),
 )
 
 const selectedBox = computed(() => displayBoxes.value.find((b) => b.id === selectedId.value) ?? null)
-const hoveredBox = computed(() => displayBoxes.value.find((b) => b.id === hoveredId.value) ?? null)
 
 // ---- 搜索：命中箱子名，或命中箱内物品 ----
 const query = ref('')
@@ -169,6 +196,34 @@ function onSceneHover(id: number | null) {
   hoveredId.value = id
 }
 
+/** G/S/R 模态变换确认后写回：只更新平面位置与底面尺寸，不动物品高度。 */
+async function onTransform(value: { id: number; x: number; z: number; w: number; d: number }) {
+  if (saving.value) return
+  const clash = findCollision({ id: value.id, x: value.x, z: value.z, w: value.w, d: value.d })
+  if (clash) {
+    toast(`与「${clash.name}」位置冲突，未保存`)
+    return
+  }
+  saving.value = true
+  try {
+    await api(`/api/containers/${value.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        pos_x: round(value.x),
+        pos_z: round(value.z),
+        size_w: clampSize(value.w),
+        size_d: clampSize(value.d),
+      }),
+    })
+    await refreshData()
+    toast('摆位已保存')
+  } catch (error) {
+    toast((error as Error).message)
+  } finally {
+    saving.value = false
+  }
+}
+
 // ---- 编辑 ----
 const form = reactive({ x: 0, y: 0, z: 0, w: 1, h: 1, d: 1 })
 const saving = ref(false)
@@ -187,6 +242,17 @@ watch(selectedBox, (box) => {
 async function saveBox() {
   const box = selectedBox.value
   if (!box || saving.value) return
+  const clash = findCollision({
+    id: box.id,
+    x: round(form.x),
+    z: round(form.z),
+    w: clampSize(form.w),
+    d: clampSize(form.d),
+  })
+  if (clash) {
+    toast(`与「${clash.name}」位置冲突，未保存`)
+    return
+  }
   saving.value = true
   try {
     await api(`/api/containers/${box.id}`, {
@@ -255,9 +321,9 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
         </p>
       </div>
       <label class="member-select"
-        ><AppIcon name="users" :size="17" /><select
+        ><AppIcon name="space" :size="17" /><select
           :value="store.selectedOwnerId"
-          aria-label="查看成员"
+          aria-label="切换房间"
           @change="store.setOwner(Number(($event.target as HTMLSelectElement).value))"
         >
           <option v-for="member in store.members" :key="member.id" :value="member.id">
@@ -275,10 +341,24 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
             :room="ROOM"
             :show-labels="showLabels"
             :focus="focus"
+            :selected-id="selectedId"
+            :show-covers="features.boxCover"
+            :label-scale="labelScale"
+            :collision-enabled="features.collision"
             @select="onSceneSelect"
             @hover="onSceneHover"
+            @transform="onTransform"
           />
         </TresCanvas>
+        <button
+          class="space-panel-toggle"
+          :aria-pressed="panelOpen"
+          :title="panelOpen ? '隐藏侧边栏' : '显示侧边栏'"
+          @click="panelOpen = !panelOpen"
+        >
+          <AppIcon name="grid" :size="17" />
+          <span>{{ panelOpen ? '隐藏侧边栏' : '显示侧边栏' }}</span>
+        </button>
         <div class="space-overlay">
           <div class="space-search">
             <AppIcon name="search" :size="18" />
@@ -287,48 +367,104 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
               <AppIcon name="close" :size="16" />
             </button>
           </div>
+          <div class="space-tools">
+            <div class="space-label-size" role="group" aria-label="调节箱子名字大小">
+              <span>名字大小</span>
+              <button type="button" aria-label="缩小名字" @click="changeLabelScale(-0.25)">A−</button>
+              <span class="space-label-value">{{ labelScale.toFixed(2) }}×</span>
+              <button type="button" aria-label="放大名字" @click="changeLabelScale(0.25)">A＋</button>
+            </div>
+            <button
+              class="space-cover-toggle"
+              :class="{ active: features.boxCover }"
+              type="button"
+              :aria-pressed="features.boxCover"
+              :title="features.boxCover ? '箱子皮肤：显示封面' : '箱子皮肤：白模'"
+              @click="toggleCover"
+            >
+              <AppIcon name="image" :size="15" />箱子皮肤
+            </button>
+          </div>
           <p class="space-status" v-if="searchingActive">
             <template v-if="searching">正在查找…</template>
             <template v-else-if="searchError">{{ searchError }}</template>
             <template v-else-if="highlightCount">已高亮 {{ highlightCount }} 个位置</template>
             <template v-else>没有找到对应位置</template>
           </p>
-          <p class="space-status" v-else>拖拽旋转 · 滚轮缩放 · 点击箱子选中</p>
-        </div>
-        <div v-if="hoveredBox" class="space-hover-badge">
-          {{ hoveredBox.name }} · {{ hoveredBox.itemCount }} 件
+          <p class="space-status" v-else>中键旋转 · 右键平移 · 滚轮缩放 · 左键选中 · G/S/R 移动/缩放/旋转</p>
         </div>
       </div>
 
-      <aside class="space-panel">
+      <aside v-if="panelOpen" class="space-panel">
+        <details class="space-help">
+          <summary>
+            <AppIcon name="help" :size="16" />
+            <span>操作说明（Blender 习惯）</span>
+            <AppIcon class="space-help-arrow" name="down" :size="16" />
+          </summary>
+          <div class="space-help-body">
+            <div class="space-help-group">
+              <span class="space-help-title">视角</span>
+              <ul>
+                <li><kbd>中键</kbd> 拖动旋转</li>
+                <li><kbd>右键</kbd> 拖动平移</li>
+                <li><kbd>滚轮</kbd> 缩放</li>
+                <li><kbd>小键盘 1 / 3 / 7</kbd> 前 / 右 / 顶视图</li>
+                <li><kbd>小键盘 0</kbd> 回到默认视角</li>
+                <li><kbd>Home</kbd> 显示全部 · <kbd>F</kbd> 聚焦选中箱子</li>
+              </ul>
+            </div>
+            <div class="space-help-group">
+              <span class="space-help-title">摆放箱子</span>
+              <ul>
+                <li><kbd>左键</kbd> 点选箱子</li>
+                <li><kbd>G</kbd> 移动（随鼠标在房间里滑动）</li>
+                <li><kbd>S</kbd> 缩放（向外拖大、向内拖小）</li>
+                <li><kbd>R</kbd> 旋转（每按一次转 90°）</li>
+                <li><kbd>Enter</kbd>/左键 确认 · <kbd>Esc</kbd> 取消</li>
+              </ul>
+            </div>
+            <p class="space-help-note">也可以在右侧输入数值后「保存摆位」。</p>
+          </div>
+        </details>
+
         <p v-if="!ownerContainers.length" class="space-empty">
           还没有箱子。先在「物品」页添加箱子，再回来摆放它们。
         </p>
 
         <template v-else>
-          <div class="space-panel-head">
-            <span>箱子列表</span>
-            <button
-              class="outline-btn"
-              :disabled="arranging || !unplaced.length"
-              @click="arrangeUnplaced"
-            >
-              {{ arranging ? '摆放中…' : `一键摆放 (${unplaced.length})` }}
-            </button>
-          </div>
-          <div class="space-box-list">
-            <button
-              v-for="box in displayBoxes"
-              :key="box.id"
-              class="space-box-row"
-              :class="{ active: box.selected, match: box.highlighted }"
-              @click="selectBox(box.id, true)"
-            >
-              <span class="space-box-name">{{ box.name }}</span>
-              <span class="space-box-meta">{{ box.itemCount }} 件</span>
-              <span class="space-box-pos">{{ round(box.x) }}, {{ round(box.z) }}</span>
-            </button>
-          </div>
+          <details class="space-help">
+            <summary>
+              <AppIcon name="box" :size="16" />
+              <span>箱子列表（{{ displayBoxes.length }}）</span>
+              <AppIcon class="space-help-arrow" name="down" :size="16" />
+            </summary>
+            <div class="space-box-body">
+              <div class="space-panel-head">
+                <span>{{ unplaced.length }} 个待摆放</span>
+                <button
+                  class="outline-btn"
+                  :disabled="arranging || !unplaced.length"
+                  @click="arrangeUnplaced"
+                >
+                  {{ arranging ? '摆放中…' : `一键摆放 (${unplaced.length})` }}
+                </button>
+              </div>
+              <div class="space-box-list">
+                <button
+                  v-for="box in displayBoxes"
+                  :key="box.id"
+                  class="space-box-row"
+                  :class="{ active: box.selected, match: box.highlighted }"
+                  @click="selectBox(box.id, true)"
+                >
+                  <span class="space-box-name">{{ box.name }}</span>
+                  <span class="space-box-meta">{{ box.itemCount }} 件</span>
+                  <span class="space-box-pos">{{ round(box.x) }}, {{ round(box.z) }}</span>
+                </button>
+              </div>
+            </div>
+          </details>
 
           <div v-if="selectedBox" class="space-editor">
             <div class="space-editor-head">

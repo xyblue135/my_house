@@ -47,14 +47,8 @@ export interface SpaceBox {
   x: number; y: number; z: number;
   w: number; h: number; d: number;
   itemCount: number; highlighted: boolean; selected: boolean;
-}
-
-export interface LifeEntry {
-  id: number; owner_id: number; owner_name: string; kind: string; title: string; content: string;
-  status: 'ACTIVE'|'DONE'|'PAUSED'|'CANCELLED'|string; priority: number; category: string; tags: string;
-  amount?: number | null; currency: string; occurred_at?: string | null; due_at?: string | null;
-  start_at?: string | null; end_at?: string | null; repeat_rule: string; progress: number;
-  target_value?: number | null; unit: string; url: string; location: string; contact: string;
-  extra_json: string; pinned: number | boolean; archived: number | boolean; completed_at?: string | null;
-  checked_today?: number | boolean; checkin_count?: number; created_at: string; updated_at: string;
+  /** 鼠标是否正悬停在该箱子上（用于外框描边）。 */
+  hovered?: boolean;
+  /** 箱子封面附件 id；有封面且开启贴图时，六个面显示该图片。 */
+  coverId?: number | null;
 }

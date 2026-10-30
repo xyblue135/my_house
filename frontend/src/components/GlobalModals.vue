@@ -34,7 +34,7 @@ function onHistorySaved() {
   return refreshData()
 }
 
-// 箱子表单里「分组」下拉：跟随当前选择的归属成员
+// 箱子表单里「分组」下拉：跟随当前选择的归属房间
 const currentGroups = computed(() =>
   store.groups.filter((g) => g.owner_id === modals.containerForm.owner_id),
 )

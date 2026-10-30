@@ -58,13 +58,12 @@ public class InventoryRepository {
     }
 
     /**
-     * 删除成员并级联清理其名下所有数据（物品、箱子、生活记录、操作历史）。
-     * 物品/箱子的附件、物品生命周期由外键 ON DELETE CASCADE 自动清理，FTS 由 trigger 维护。
+     * 删除房间并级联清理其名下所有数据（物品、箱子、操作历史）。
+     * 物品/箱子的附件由外键 ON DELETE CASCADE 自动清理，FTS 由 trigger 维护。
      */
     public void deleteMember(long id) {
         jdbc.update("DELETE FROM items WHERE container_id IN (SELECT id FROM containers WHERE owner_id = ?)", id);
         jdbc.update("DELETE FROM containers WHERE owner_id = ?", id);
-        jdbc.update("DELETE FROM life_entries WHERE owner_id = ?", id);
         jdbc.update("DELETE FROM operation_history WHERE owner_id = ?", id);
         jdbc.update("DELETE FROM household_members WHERE id = ?", id);
     }

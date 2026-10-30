@@ -548,7 +548,7 @@ video {
 }
 .container-cover {
   width: 82px;
-  height: 96px;
+  height: 82px;
   border-radius: 13px;
   color: #6c886b;
   display: grid;
@@ -728,229 +728,6 @@ video {
   background: #f9eae5;
 }
 
-/* Bills */
-.billing-view {
-  max-width: 880px;
-  margin: 0 auto;
-}
-.month-picker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.month-picker h2 {
-  font-size: 16px;
-}
-.balance-card {
-  border-radius: 22px;
-  background: #295c46;
-  color: #fff;
-  padding: 25px 28px;
-  box-shadow: 0 8px 22px #234f3610;
-}
-.balance-label {
-  display: block;
-  font-size: 13px;
-  color: #d4e3cc;
-}
-.balance-value {
-  display: block;
-  font-size: clamp(27px, 5vw, 38px);
-  font-weight: 600;
-  line-height: 1.35;
-  margin: 6px 0 22px;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.balance-breakdown {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid #ffffff26;
-  padding-top: 18px;
-  gap: 16px;
-}
-.balance-breakdown > div {
-  min-width: 0;
-}
-.balance-breakdown span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: #d4e3cc;
-}
-.balance-breakdown strong {
-  display: block;
-  font-size: 19px;
-  margin-top: 5px;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-.billing-calendar {
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 16px;
-  margin: 16px 0 0;
-  padding: 0 16px;
-}
-.billing-calendar summary {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 57px;
-  font-size: 14px;
-}
-.billing-calendar summary::-webkit-details-marker {
-  display: none;
-}
-.billing-calendar summary > span {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.billing-calendar[open] {
-  padding-bottom: 16px;
-}
-.billing-calendar[open] summary > .app-icon {
-  transform: rotate(180deg);
-}
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-}
-.weekday span {
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
-  padding: 9px 0;
-}
-.calendar-cell {
-  min-height: 52px;
-  min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 5px 2px;
-  background: #f6f8f3;
-  text-align: center;
-  overflow: hidden;
-}
-.calendar-cell.selected {
-  border-color: var(--primary);
-  background: var(--soft);
-  box-shadow: 0 0 0 1px var(--primary);
-}
-.calendar-cell.today .cal-day {
-  color: var(--primary);
-  font-weight: 800;
-}
-.cal-day {
-  font-size: 13px;
-}
-.cal-net {
-  display: block;
-  font-size: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cal-net.neg {
-  color: var(--danger);
-}
-.cal-net.pos {
-  color: var(--primary);
-}
-.billing-kind {
-  display: flex;
-  padding: 5px;
-  background: #edf1e9;
-  border-radius: 12px;
-  gap: 6px;
-}
-.billing-kind button {
-  flex: 1;
-  border: 0;
-  border-radius: 9px;
-  min-height: 42px;
-  background: none;
-  font-weight: 600;
-  color: var(--muted);
-}
-.billing-kind button.active {
-  background: #fff;
-  box-shadow: 0 2px 7px #233a3310;
-  color: var(--primary);
-}
-.amount-input {
-  font-size: 27px !important;
-  font-weight: 600;
-}
-.billing-list {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 17px;
-  padding: 0 16px;
-}
-.billing-row {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-}
-.billing-row:last-child {
-  border-bottom: 0;
-}
-.billing-entry-button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 0;
-  background: none;
-  text-align: left;
-  padding: 18px 0;
-  flex: 1;
-  min-width: 0;
-}
-.billing-entry-icon {
-  width: 42px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  background: #f4eee2;
-  color: #9f865c;
-  border-radius: 12px;
-  flex: 0 0 auto;
-}
-.billing-entry-icon.income {
-  color: var(--primary);
-  background: #eaf2e6;
-}
-.billing-row-main {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-.billing-row-main strong {
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.billing-row-main > span {
-  font-size: 11px;
-  color: var(--muted);
-}
-.billing-amount {
-  font-size: 15px;
-  max-width: 40%;
-  overflow-wrap: anywhere;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.billing-amount.income {
-  color: var(--primary);
-}
 /* Recipe book */
 .recipe-tools {
   margin-bottom: 22px;
@@ -1078,6 +855,33 @@ video {
   background: #fff;
   border-radius: 19px;
   margin-bottom: 16px;
+}
+.settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.settings-switch-row > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.settings-switch-row b {
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.settings-switch-row em {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.settings-switch-row .ai-search-toggle {
+  min-height: 0;
 }
 .settings-title {
   display: flex;
@@ -1531,7 +1335,7 @@ body.preview-open {
 .container-detail-cover,
 .box-mark.large {
   width: 60px;
-  height: 64px;
+  height: 60px;
   flex: 0 0 auto;
   border-radius: 14px;
   background: var(--soft);
@@ -2036,38 +1840,6 @@ body.preview-open {
   body:has(.modal-backdrop) .toast {
     bottom: calc(25px + env(safe-area-inset-bottom));
   }
-  .balance-card {
-    padding: 24px;
-    border-radius: 19px;
-  }
-  .balance-value {
-    font-size: 32px;
-  }
-  .balance-breakdown strong {
-    font-size: 18px;
-  }
-  .billing-list {
-    padding: 0 12px;
-  }
-  .billing-entry-button {
-    gap: 10px;
-  }
-  .billing-row-main strong {
-    font-size: 14px;
-  }
-  .billing-amount {
-    font-size: 14px;
-  }
-  .billing-row > .icon-btn {
-    width: 34px;
-    min-width: 34px;
-    padding: 7px;
-  }
-  .billing-entry-icon {
-    width: 37px;
-    height: 40px;
-    border-radius: 11px;
-  }
   .recipe-grid {
     gap: 12px;
   }
@@ -2148,9 +1920,6 @@ body.preview-open {
   }
   .recipe-cover {
     height: 165px;
-  }
-  .billing-entry-icon {
-    display: none;
   }
   .modal-actions .danger-outline {
     width: 100%;
@@ -2287,15 +2056,72 @@ body.preview-open {
   font-size: var(--fs-xs);
   color: var(--muted);
 }
-.space-hover-badge {
+.space-panel-toggle {
   position: absolute;
-  left: 14px;
-  bottom: 14px;
-  padding: 6px 12px;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
   border-radius: 10px;
-  background: #1a2d25d9;
-  color: #fff;
+  border: 1px solid var(--line);
+  background: #fffffff2;
+  color: var(--primary-dark);
   font-size: var(--fs-xs);
+  font-weight: 650;
+}
+.space-tools {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.space-label-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: #fffffff2;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  pointer-events: auto;
+}
+.space-label-size button {
+  border: 0;
+  background: none;
+  color: var(--primary-dark);
+  font-weight: 700;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.space-label-value {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.space-cover-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fffffff2;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.space-cover-toggle.active {
+  border-color: var(--primary-dark);
+  background: var(--primary-dark);
+  color: #fff;
 }
 .space-panel {
   flex: 0 0 312px;
@@ -2303,6 +2129,75 @@ body.preview-open {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+.space-help {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  padding: 11px 13px;
+}
+.space-help > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--primary-dark);
+  list-style: none;
+  cursor: pointer;
+}
+.space-help > summary::-webkit-details-marker {
+  display: none;
+}
+.space-help-arrow {
+  margin-left: auto;
+  transition: transform 0.18s;
+}
+.space-help[open] .space-help-arrow {
+  transform: rotate(180deg);
+}
+.space-help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 11px;
+}
+.space-box-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 11px;
+}
+.space-help-title {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.space-help-group ul {
+  margin: 0;
+  padding: 0 0 0 15px;
+  list-style: disc;
+  font-size: var(--fs-sm);
+  line-height: 1.9;
+  color: var(--ink);
+}
+.space-help-group kbd {
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  padding: 1px 6px;
+  border: 1px solid #cdd8cb;
+  border-radius: 5px;
+  background: #fff;
+  color: var(--primary-dark);
+}
+.space-help-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
 }
 .space-empty,
 .space-editor-hint {

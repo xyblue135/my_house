@@ -47,12 +47,12 @@ async function applyImage(url: string) {
   imgRect.y = (sh - h) / 2
   imgRect.w = w
   imgRect.h = h
-  // 初始选区：图片 90% 居中
-  const m = 0.9
-  crop.w = w * m
-  crop.h = h * m
-  crop.x = imgRect.x + (w - crop.w) / 2
-  crop.y = imgRect.y + (h - crop.h) / 2
+  // 封面统一 1:1：初始选区取居中的最大正方形（占图片 90%）
+  const side = Math.min(w, h) * 0.9
+  crop.w = side
+  crop.h = side
+  crop.x = imgRect.x + (w - side) / 2
+  crop.y = imgRect.y + (h - side) / 2
 }
 
 async function rotate(dir: 1 | -1) {
@@ -92,27 +92,31 @@ function onPointerMove(e: PointerEvent) {
   if (!dragging) return
   const dx = e.clientX - startX
   const dy = e.clientY - startY
-  if (dragMode === 'move') {
-    crop.x = clamp(startCrop.x + dx, imgRect.x, imgRect.x + imgRect.w - crop.w)
-    crop.y = clamp(startCrop.y + dy, imgRect.y, imgRect.y + imgRect.h - crop.h)
-    return
-  }
-  let { x, y, w, h } = startCrop
-  if (dragMode.includes('e')) w = startCrop.w + dx
-  if (dragMode.includes('s')) h = startCrop.h + dy
-  if (dragMode.includes('w')) { x = startCrop.x + dx; w = startCrop.w - dx }
-  if (dragMode.includes('n')) { y = startCrop.y + dy; h = startCrop.h - dy }
-  // 最小尺寸约束
-  if (w < MIN) { if (dragMode.includes('w')) x -= MIN - w; w = MIN }
-  if (h < MIN) { if (dragMode.includes('n')) y -= MIN - h; h = MIN }
-  // 夹紧在图片显示区域内
   const maxX = imgRect.x + imgRect.w
   const maxY = imgRect.y + imgRect.h
-  x = clamp(x, imgRect.x, maxX - w)
-  y = clamp(y, imgRect.y, maxY - h)
-  w = clamp(w, MIN, maxX - x)
-  h = clamp(h, MIN, maxY - y)
-  crop.x = x; crop.y = y; crop.w = w; crop.h = h
+  if (dragMode === 'move') {
+    crop.x = clamp(startCrop.x + dx, imgRect.x, maxX - crop.w)
+    crop.y = clamp(startCrop.y + dy, imgRect.y, maxY - crop.h)
+    return
+  }
+  // 封面锁定 1:1：拖拽任意手柄都保持正方形
+  const horiz = dragMode.includes('e') || dragMode.includes('w')
+  const vert = dragMode.includes('n') || dragMode.includes('s')
+  const dw = dragMode.includes('e') ? dx : dragMode.includes('w') ? -dx : 0
+  const dh = dragMode.includes('s') ? dy : dragMode.includes('n') ? -dy : 0
+  let size = startCrop.w
+  if (horiz && vert) size = Math.max(startCrop.w + dw, startCrop.h + dh)
+  else if (horiz) size = startCrop.w + dw
+  else size = startCrop.h + dh
+  const maxSide = Math.min(imgRect.w, imgRect.h)
+  const lo = Math.min(MIN, maxSide)
+  size = clamp(size, lo, maxSide)
+  // 以拖拽手柄的对角边为锚点，向右下（或依手柄方向）展开
+  let x = dragMode.includes('w') ? startCrop.x + startCrop.w - size : startCrop.x
+  let y = dragMode.includes('n') ? startCrop.y + startCrop.h - size : startCrop.y
+  x = clamp(x, imgRect.x, maxX - size)
+  y = clamp(y, imgRect.y, maxY - size)
+  crop.x = x; crop.y = y; crop.w = size; crop.h = size
 }
 
 function onPointerUp() {
@@ -168,7 +172,7 @@ onBeforeUnmount(() => {
   <div v-dialog="() => emit('cancel')" aria-label="裁剪图片" class="modal-backdrop crop-backdrop" @click.self="emit('cancel')">
     <div class="modal crop-modal">
       <div class="modal-head">
-        <div><p class="eyebrow">CROP</p><h3>裁剪图片</h3></div>
+        <div><p class="eyebrow">CROP · 1:1</p><h3>裁剪封面</h3></div>
         <button class="icon-btn" @click="emit('cancel')">×</button>
       </div>
 

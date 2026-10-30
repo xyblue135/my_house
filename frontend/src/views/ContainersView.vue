@@ -23,7 +23,7 @@ const searchOwnerIds = ref<number[]>([])
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
 const scopeLabel = computed(() => searchOwnerIds.value.length
   ? store.members.filter(member => searchOwnerIds.value.includes(member.id)).map(member => member.name).join('、')
-  : '全部成员')
+  : '全部房间')
 const searchResults = ref<Item[]>([])
 const searching = ref(false)
 const searchError = ref('')
@@ -235,9 +235,9 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <label class="member-select"
-        ><AppIcon name="users" :size="17" /><select
+        ><AppIcon name="space" :size="17" /><select
           :value="store.selectedOwnerId"
-          aria-label="查看成员"
+          aria-label="查看房间"
           @change="selectOwner"
         >
           <option v-for="member in store.members" :key="member.id" :value="member.id">
@@ -345,7 +345,7 @@ onBeforeUnmount(() => {
       >
         <AppIcon name="search" :size="36" />
         <h3>还没找到这件东西</h3>
-        <p>试试更短的名称，或切换其他成员。</p>
+        <p>试试更短的名称，或切换其他房间。</p>
         <button class="outline-btn" @click="query = ''">返回所有箱子</button>
       </div>
     </template>

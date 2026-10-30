@@ -33,13 +33,15 @@ public class DatabaseInitializer implements ApplicationRunner {
         migrateContainerNameScope();
         migrateContainerPlacement();
         renameDefaultMembers();
+        renameDefaultRooms();
         createV08Schema();
         migrateContainerAttachments();
         dropVestigialLifecycle();
-        createLifeHubSchema();
+        dropLifeHubSchema();
         createRecipesSchema();
         migrateRecipeAttachments();
         createFtsTriggers();
+        migrateSquareCovers();
 
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM containers", Integer.class);
         if (count != null && count == 0) seedFreshDatabase();
@@ -51,7 +53,6 @@ public class DatabaseInitializer implements ApplicationRunner {
             jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-31-v1-fts-triggers");
         }
         jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-19-v0.8-household-history-lifecycle-fts");
-        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-08-21-v1-life-hub");
 
         // 清理孤儿附件文件（磁盘上有但 DB 已无）
         try {
@@ -69,6 +70,23 @@ public class DatabaseInitializer implements ApplicationRunner {
             Integer c = jdbc.queryForObject("SELECT COUNT(*) FROM migrations WHERE key = ?", Integer.class, key);
             return c != null && c > 0;
         } catch (Exception ex) { return false; }
+    }
+
+    /**
+     * 统一封面比例：把已存量的图片附件裁剪为 1:1 正方形（居中裁剪，不做识别）。
+     * 只跑一次；用户的图片文件会被原地重写，元数据不变，撤销引用仍然有效。
+     */
+    private void migrateSquareCovers() {
+        if (isMigrationApplied("2026-10-19-v1-square-covers")) return;
+        try {
+            int done = attachments.cropImagesToSquare();
+            if (done > 0) org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
+                .info("已把 {} 张封面图片裁剪为 1:1", done);
+        } catch (Exception ex) {
+            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
+                .warn("封面裁剪迁移失败: {}", ex.getMessage());
+        }
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-square-covers");
     }
 
     /**
@@ -338,6 +356,18 @@ public class DatabaseInitializer implements ApplicationRunner {
         jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-09-16-v1-rename-default-members");
     }
 
+    /**
+     * 把默认房间名（原「用户1/2/3」，含已改名的「xyblue」）一次性改为「房间1/2/3」：
+     * 库存的归属概念由「成员」调整为「房间」。用 `AND name = 旧名` 保护用户自定义改名。
+     */
+    private void renameDefaultRooms() {
+        if (isMigrationApplied("2026-10-19-v1-rename-members-to-rooms")) return;
+        jdbc.update("UPDATE household_members SET name = '房间1' WHERE id = 1 AND name IN ('xyblue','用户1')");
+        jdbc.update("UPDATE household_members SET name = '房间2' WHERE id = 2 AND name = '用户2'");
+        jdbc.update("UPDATE household_members SET name = '房间3' WHERE id = 3 AND name = '用户3'");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-rename-members-to-rooms");
+    }
+
     private void createV08Schema() {
         jdbc.execute("""
             CREATE TABLE IF NOT EXISTS operation_history (
@@ -397,57 +427,15 @@ public class DatabaseInitializer implements ApplicationRunner {
         }
     }
 
-    private void createLifeHubSchema() {
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS life_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER NOT NULL DEFAULT 1,
-                kind TEXT NOT NULL,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'ACTIVE',
-                priority INTEGER NOT NULL DEFAULT 0,
-                category TEXT NOT NULL DEFAULT '',
-                tags TEXT NOT NULL DEFAULT '',
-                amount REAL,
-                currency TEXT NOT NULL DEFAULT 'CNY',
-                occurred_at TEXT,
-                due_at TEXT,
-                start_at TEXT,
-                end_at TEXT,
-                repeat_rule TEXT NOT NULL DEFAULT '',
-                progress REAL NOT NULL DEFAULT 0,
-                target_value REAL,
-                unit TEXT NOT NULL DEFAULT '',
-                url TEXT NOT NULL DEFAULT '',
-                location TEXT NOT NULL DEFAULT '',
-                contact TEXT NOT NULL DEFAULT '',
-                extra_json TEXT NOT NULL DEFAULT '{}',
-                pinned INTEGER NOT NULL DEFAULT 0,
-                archived INTEGER NOT NULL DEFAULT 0,
-                completed_at TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(owner_id) REFERENCES household_members(id) ON DELETE RESTRICT
-            )
-            """);
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_kind ON life_entries(kind, archived, updated_at DESC)");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_owner ON life_entries(owner_id, archived, updated_at DESC)");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_due ON life_entries(due_at, status, archived)");
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_occurred ON life_entries(occurred_at DESC, kind)");
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS life_checkins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                entry_id INTEGER NOT NULL,
-                checkin_date TEXT NOT NULL,
-                value REAL NOT NULL DEFAULT 1,
-                note TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(entry_id, checkin_date),
-                FOREIGN KEY(entry_id) REFERENCES life_entries(id) ON DELETE CASCADE
-            )
-            """);
-        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_life_checkins_entry ON life_checkins(entry_id, checkin_date DESC)");
+    /**
+     * 移除已废弃的账本功能：life_entries / life_checkins 表与相关 UI、接口均已下线，
+     * 旧库残留数据在此删除。
+     */
+    private void dropLifeHubSchema() {
+        if (isMigrationApplied("2026-10-19-v1-remove-life-hub")) return;
+        jdbc.execute("DROP TABLE IF EXISTS life_checkins");
+        jdbc.execute("DROP TABLE IF EXISTS life_entries");
+        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-remove-life-hub");
     }
 
     /**

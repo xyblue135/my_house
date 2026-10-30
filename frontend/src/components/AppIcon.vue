@@ -2,7 +2,6 @@
 import {
   Package,
   House,
-  Wallet,
   CookingPot,
   Settings,
   Plus,
@@ -10,7 +9,6 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
   ArrowUp,
   ArrowDown,
   Trash2,
@@ -24,7 +22,6 @@ import {
   ArrowUpDown,
   Sparkles,
   Send,
-  Users,
   Server,
   KeyRound,
   ShieldCheck,
@@ -34,15 +31,12 @@ import {
   LayoutGrid,
   CircleHelp,
   Wifi,
-  Receipt,
-  CalendarDays,
   Cuboid,
 } from '@lucide/vue'
 const icons = {
   box: Package,
   space: Cuboid,
   home: House,
-  wallet: Wallet,
   cooking: CookingPot,
   settings: Settings,
   plus: Plus,
@@ -50,7 +44,6 @@ const icons = {
   close: X,
   down: ChevronDown,
   right: ChevronRight,
-  left: ChevronLeft,
   up: ArrowUp,
   lower: ArrowDown,
   trash: Trash2,
@@ -64,7 +57,6 @@ const icons = {
   sort: ArrowUpDown,
   sparkles: Sparkles,
   send: Send,
-  users: Users,
   server: Server,
   key: KeyRound,
   shield: ShieldCheck,
@@ -74,8 +66,6 @@ const icons = {
   grid: LayoutGrid,
   help: CircleHelp,
   wifi: Wifi,
-  receipt: Receipt,
-  calendar: CalendarDays,
 }
 withDefaults(defineProps<{ name: keyof typeof icons; size?: number }>(), { size: 20 })
 </script>

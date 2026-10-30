@@ -10,7 +10,6 @@ const route = useRoute()
 const allNavItems = [
   { name: 'containers', label: '物品', icon: 'box' },
   { name: 'space', label: '房间', icon: 'space' },
-  { name: 'billing', label: '账单', icon: 'wallet' },
   { name: 'cooking', label: '菜谱', icon: 'cooking' },
   { name: 'settings', label: '设置', icon: 'settings' },
 ] as const

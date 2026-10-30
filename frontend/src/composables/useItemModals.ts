@@ -352,7 +352,7 @@ function createItemModalsImpl(): ItemModals {
     get filteredContainers() { return filteredContainers.value },
     openAddItem(containerId?: number) {
       resetItemForm(containerId)
-      if (!itemForm.container_id) { toast('请先给当前成员创建一个箱子'); return }
+      if (!itemForm.container_id) { toast('请先给当前房间创建一个箱子'); return }
       itemModalOpen.value = true
     },
     openEditItem,

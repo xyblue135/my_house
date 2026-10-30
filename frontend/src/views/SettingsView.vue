@@ -71,19 +71,19 @@ onMounted(async () => {
   await refreshMqStatus()
 })
 
-// ---- 成员管理 ----
+// ---- 房间管理 ----
 const newMemberName = ref('')
 async function addMember() {
   const name = newMemberName.value.trim()
   if (!name) {
-    toast('请输入成员名称')
+    toast('请输入房间名称')
     return
   }
   try {
     await api('/api/members', { method: 'POST', body: JSON.stringify({ name }) })
     newMemberName.value = ''
     await refreshData()
-    toast('已添加成员')
+    toast('已添加房间')
   } catch (error) {
     toast((error as Error).message)
   }
@@ -91,7 +91,7 @@ async function addMember() {
 async function renameMember(m: Member) {
   const name = m.name.trim()
   if (!name) {
-    toast('成员名称不能为空')
+    toast('房间名称不能为空')
     return
   }
   try {
@@ -103,11 +103,11 @@ async function renameMember(m: Member) {
   }
 }
 async function deleteMember(m: Member) {
-  if (!window.confirm(`删除用户「${m.name}」及其名下所有箱子、物品、记录？此操作不可恢复。`)) return
+  if (!window.confirm(`删除房间「${m.name}」及其名下所有箱子、物品、记录？此操作不可恢复。`)) return
   try {
     await api(`/api/members/${m.id}`, { method: 'DELETE' })
     await refreshData()
-    toast('已删除成员')
+    toast('已删除房间')
   } catch (error) {
     toast((error as Error).message)
   }
@@ -115,6 +115,9 @@ async function deleteMember(m: Member) {
 
 function toggleSpaceView(event: Event) {
   setFeature('spaceView', (event.target as HTMLInputElement).checked)
+}
+function toggleCollision(event: Event) {
+  setFeature('collision', (event.target as HTMLInputElement).checked)
 }
 </script>
 
@@ -124,20 +127,20 @@ function toggleSpaceView(event: Event) {
       <div>
         <p class="eyebrow">按家里的习惯来</p>
         <h1>设置</h1>
-        <p class="page-description">管理家人，也照顾好你的数据。</p>
+        <p class="page-description">管理房间，也照顾好你的数据。</p>
       </div>
     </div>
     <div class="settings-card">
       <div class="settings-title">
-        <div class="settings-icon"><AppIcon name="users" /></div>
+        <div class="settings-icon"><AppIcon name="home" /></div>
         <div>
-          <h3>成员管理</h3>
-          <p>在物品页切换成员，查看各自的收纳。删除成员会删除其名下的全部数据。</p>
+          <h3>房间管理</h3>
+          <p>在物品页切换房间，查看各自的收纳。删除房间会删除其名下的全部数据。</p>
         </div>
       </div>
       <div class="member-manage-list">
         <div v-for="m in store.members" :key="m.id" class="member-manage-row">
-          <input v-model="m.name" :aria-label="'成员名称：' + m.id" @change="renameMember(m)" />
+          <input v-model="m.name" :aria-label="'房间名称：' + m.id" @change="renameMember(m)" />
           <button
             class="outline-btn danger-outline"
             :disabled="store.members.length <= 1"
@@ -150,12 +153,12 @@ function toggleSpaceView(event: Event) {
       <div class="member-manage-add">
         <input
           v-model="newMemberName"
-          aria-label="新成员名称"
-          placeholder="家人的称呼"
+          aria-label="新房间名称"
+          placeholder="如：书房、储物间"
           @keyup.enter="addMember"
         />
         <button class="primary-btn" @click="addMember">
-          <AppIcon name="plus" :size="17" />添加成员
+          <AppIcon name="plus" :size="17" />添加房间
         </button>
       </div>
     </div>
@@ -177,6 +180,21 @@ function toggleSpaceView(event: Event) {
         />
         <span class="toggle-track" aria-hidden="true"></span>
         <span>{{ features.spaceView ? '已开启' : '已关闭' }}</span>
+      </label>
+      <label class="settings-switch-row">
+        <span>
+          <b>实体碰撞</b>
+          <em>开启后箱子平面位置重叠时无法保存或移动（默认开启）。</em>
+        </span>
+        <span class="ai-search-toggle" :class="{ active: features.collision }">
+          <input
+            type="checkbox"
+            role="switch"
+            :checked="features.collision"
+            @change="toggleCollision($event)"
+          />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
       </label>
     </div>
 

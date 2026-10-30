@@ -15,7 +15,7 @@
     <artifactId>itemnest</artifactId>
     <version>1.0.0</version>
     <name>ItemNest</name>
-    <description>ItemNest local-first inventory and life management hub</description>
+    <description>ItemNest local-first inventory hub</description>
 
     <properties>
         <java.version>21</java.version>

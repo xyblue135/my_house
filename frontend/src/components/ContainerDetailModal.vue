@@ -23,7 +23,7 @@ const container = computed(() =>
     ? null
     : (store.containers.find((c) => c.id === props.containerId) ?? null),
 )
-// 当前箱子归属成员下的分组
+// 当前箱子归属房间下的分组
 const ownerGroups = computed(() => {
   const c = container.value
   if (!c) return []
