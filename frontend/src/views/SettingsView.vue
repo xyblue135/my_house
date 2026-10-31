@@ -1,27 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
-import { api, getApiBase, setApiBase, setSessionToken } from '../api'
+import { api } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
+import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { searchScope, setSearchScope } from '../composables/useSearchScope'
 import {
-  cloudConfig, cloudBusy, cloudMessage, lastBackupTime,
-  saveCloudConfig, backupToCloud, restoreFromCloud, type CloudConfig,
-} from '../composables/useCloudBackup'
+  providers, saveProviders, verifyProvider, pushToCloud, pullFromCloud, type ProviderConfig, type CloudProviders,
+} from '../local/sync'
 import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
   setTtsEnabled, setTtsCustomOn, setTtsCustomUrl, setTtsCustomKey, speak,
 } from '../composables/useSpeech'
-import type { AiSettings, MqStatus } from '../types'
+import type { AiSettings } from '../types'
 
 const store = useAppStore()
 const { toast } = useToast()
+const { refreshData } = useAppBootstrap()
 
 const apiKeyInput = ref('')
 const showApiKey = ref(false)
 const settingsSaved = ref(false)
-const backendUrlInput = ref(getApiBase())
 
 async function saveSettings() {
   const payload: Record<string, string> = {
@@ -45,35 +45,12 @@ async function saveSettings() {
   }
 }
 
-function saveBackendUrl() {
-  try {
-    setApiBase(backendUrlInput.value)
-    location.reload()
-  } catch (error) {
-    toast((error as Error).message)
-  }
-}
-
-function logout() {
-  setSessionToken(null)
-  location.reload()
-}
-
-async function refreshMqStatus() {
-  try {
-    Object.assign(store.mqStatus, await api<MqStatus>('/api/mq/status'))
-  } catch (error) {
-    toast((error as Error).message)
-  }
-}
-
 onMounted(async () => {
   try {
     Object.assign(store.aiSettings, await api<AiSettings>('/api/settings'))
   } catch (error) {
     toast((error as Error).message)
   }
-  await refreshMqStatus()
 })
 
 // ---- 查找范围 ----
@@ -92,34 +69,56 @@ function changeScope(event: Event) {
   toast('查找范围已更新：' + currentScopeName.value)
 }
 
-// ---- 云备份（GitHub / Gitee / 自定义地址）----
-function updateCloud(field: keyof CloudConfig, value: string) {
-  saveCloudConfig({ ...cloudConfig.value, [field]: value } as CloudConfig)
-}
-async function runBackup() {
-  if (cloudBusy.value) return
-  try {
-    const time = await backupToCloud((text) => { cloudMessage.value = text })
-    cloudMessage.value = '备份完成：' + time
-    toast('云备份完成')
-  } catch (error) {
-    cloudMessage.value = (error as Error).message
-    toast((error as Error).message)
+// ---- 云同步（GitHub / Gitee 双仓库）----
+type SlotKey = 'github' | 'gitee'
+const syncSlots = reactive<Record<SlotKey, { busy: boolean; message: string }>>({
+  github: { busy: false, message: '' },
+  gitee: { busy: false, message: '' },
+})
+function updateProvider(slot: SlotKey, field: keyof ProviderConfig, value: string) {
+  const next: CloudProviders = {
+    github: { ...providers.github },
+    gitee: { ...providers.gitee },
   }
+  next[slot][field] = value
+  saveProviders(next)
 }
-async function runRestore() {
-  if (cloudBusy.value) return
-  if (!window.confirm('从云端恢复会整体替换服务器上的数据库和附件（恢复前请先备份一次现有数据）。继续？')) return
+async function verifySlot(slot: SlotKey) {
+  updateProvider(slot, 'url', providers[slot].url)
+  syncSlots[slot].busy = true
+  syncSlots[slot].message = ''
   try {
-    const message = await restoreFromCloud((text) => { cloudMessage.value = text })
-    cloudMessage.value = message
-    toast('恢复已就绪，重启服务后生效')
+    syncSlots[slot].message = '✓ ' + (await verifyProvider(slot, providers[slot]))
   } catch (error) {
-    cloudMessage.value = (error as Error).message
-    toast((error as Error).message)
-  }
+    syncSlots[slot].message = '✗ ' + (error as Error).message
+  } finally { syncSlots[slot].busy = false }
 }
-
+async function pushSlot(slot: SlotKey) {
+  updateProvider(slot, 'url', providers[slot].url)
+  syncSlots[slot].busy = true
+  syncSlots[slot].message = ''
+  try {
+    syncSlots[slot].message = await pushToCloud(slot, (text) => { syncSlots[slot].message = text })
+    toast(syncSlots[slot].message)
+  } catch (error) {
+    syncSlots[slot].message = '✗ ' + (error as Error).message
+    toast((error as Error).message)
+  } finally { syncSlots[slot].busy = false }
+}
+async function pullSlot(slot: SlotKey) {
+  updateProvider(slot, 'url', providers[slot].url)
+  if (!window.confirm('拉取会用云端数据整体替换本机数据（先推送一次再拉取可防丢失）。继续？')) return
+  syncSlots[slot].busy = true
+  syncSlots[slot].message = ''
+  try {
+    syncSlots[slot].message = await pullFromCloud(slot, (text) => { syncSlots[slot].message = text })
+    toast(syncSlots[slot].message)
+    await refreshData()
+  } catch (error) {
+    syncSlots[slot].message = '✗ ' + (error as Error).message
+    toast((error as Error).message)
+  } finally { syncSlots[slot].busy = false }
+}
 // ---- 朗读 ----
 function toggleTts(event: Event) {
   setTtsEnabled((event.target as HTMLInputElement).checked)
@@ -162,76 +161,49 @@ function testSpeak() {
       <div class="settings-title">
         <div class="settings-icon"><AppIcon name="download" /></div>
         <div>
-          <h3>云备份</h3>
-          <p>把数据库和照片备份到 GitHub / Gitee 私有仓库，可随时恢复。令牌需有该仓库读写权限。</p>
+          <h3>云同步</h3>
+          <p>数据保存在手机，通过私有仓库同步备份。GitHub 与 Gitee 各自独立，配几个用几个。</p>
         </div>
       </div>
-      <div class="cloud-backup-form">
+      <div v-for="slot in (['github', 'gitee'] as SlotKey[])" :key="slot" class="cloud-backup-form">
+        <h4 class="cloud-slot-title">{{ slot === 'github' ? 'GitHub 仓库' : 'Gitee 仓库' }}</h4>
         <label
-          >平台<select
-            :value="cloudConfig.provider"
-            aria-label="备份平台"
-            :disabled="cloudBusy"
-            @change="updateCloud('provider', ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="github">GitHub</option>
-            <option value="gitee">Gitee（码云）</option>
-          </select></label
-        >
-        <label
-          >API 地址（选填，自建 Gitea 等用）<input
-            :value="cloudConfig.apiBase"
+          >仓库地址<input
+            :value="providers[slot].url"
             type="text"
-            :disabled="cloudBusy"
-            placeholder="https://gitea.example.com/api/v1"
-            @change="updateCloud('apiBase', ($event.target as HTMLInputElement).value)"
+            inputmode="url"
+            :disabled="syncSlots[slot].busy"
+            :placeholder="slot === 'github' ? 'https://github.com/xyblue135/my_house_data' : 'https://gitee.com/xyblue135/my_house_data'"
+            @change="updateProvider(slot, 'url', ($event.target as HTMLInputElement).value)"
           /></label
         >
         <div class="cloud-grid">
           <label
-            >仓库所有者<input
-              :value="cloudConfig.owner"
-              type="text"
-              :disabled="cloudBusy"
-              placeholder="xyblue"
-              @change="updateCloud('owner', ($event.target as HTMLInputElement).value)"
-          /></label>
-          <label
-            >仓库名<input
-              :value="cloudConfig.repo"
-              type="text"
-              :disabled="cloudBusy"
-              placeholder="my_house_backup"
-              @change="updateCloud('repo', ($event.target as HTMLInputElement).value)"
-          /></label>
-          <label
             >分支<input
-              :value="cloudConfig.branch"
+              :value="providers[slot].branch"
               type="text"
-              :disabled="cloudBusy"
+              :disabled="syncSlots[slot].busy"
               placeholder="main"
-              @change="updateCloud('branch', ($event.target as HTMLInputElement).value)"
+              @change="updateProvider(slot, 'branch', ($event.target as HTMLInputElement).value)"
           /></label>
           <label
             >访问令牌<input
-              :value="cloudConfig.token"
+              :value="providers[slot].token"
               type="password"
-              :disabled="cloudBusy"
+              :disabled="syncSlots[slot].busy"
               autocomplete="off"
-              placeholder="私有令牌，只存本机"
-              @change="updateCloud('token', ($event.target as HTMLInputElement).value)"
+              placeholder="只存本机"
+              @change="updateProvider(slot, 'token', ($event.target as HTMLInputElement).value)"
           /></label>
         </div>
         <div class="settings-actions">
-          <button class="primary-btn" :disabled="cloudBusy || !cloudConfig.token" @click="runBackup">
-            {{ cloudBusy ? '处理中…' : '立即备份' }}
+          <button class="outline-btn" :disabled="syncSlots[slot].busy" @click="verifySlot(slot)">验证鉴权</button>
+          <button class="primary-btn" :disabled="syncSlots[slot].busy" @click="pushSlot(slot)">
+            {{ syncSlots[slot].busy ? '同步中…' : '推送到云端' }}
           </button>
-          <button class="outline-btn" :disabled="cloudBusy || !cloudConfig.token" @click="runRestore">
-            从云端恢复
-          </button>
+          <button class="outline-btn" :disabled="syncSlots[slot].busy" @click="pullSlot(slot)">从云端拉取</button>
         </div>
-        <p v-if="cloudMessage" class="cloud-message" role="status">{{ cloudMessage }}</p>
-        <p v-else-if="lastBackupTime" class="cloud-message">上次备份：{{ lastBackupTime }}</p>
+        <p v-if="syncSlots[slot].message" class="cloud-message" role="status">{{ syncSlots[slot].message }}</p>
       </div>
     </div>
 
@@ -285,99 +257,48 @@ function testSpeak() {
       </div>
     </div>
 
-    <details class="settings-advanced">
-      <summary>连接与高级设置<AppIcon name="down" :size="18" /></summary>
-      <div class="settings-card">
-        <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="server" /></div>
-          <div>
-            <h3>数据服务地址</h3>
-            <p>通常无需修改。更换服务器时，填写新的 HTTPS 地址。</p>
-          </div>
+    <div class="settings-card">
+      <div class="settings-title">
+        <div class="settings-icon"><AppIcon name="sparkles" /></div>
+        <div>
+          <h3>AI 接口</h3>
+          <p>兼容 OpenAI Chat Completions。密钥由自己手动输入，只存本机不上云。</p>
         </div>
-        <form class="settings-form" @submit.prevent="saveBackendUrl">
-          <label
-            >服务地址<input v-model="backendUrlInput" placeholder="https://items.example.com"
-          /></label>
-          <div class="settings-actions"><button class="primary-btn">保存并重连</button></div>
-        </form>
       </div>
+      <form class="settings-form" @submit.prevent="saveSettings">
+        <label>接口地址<input v-model="store.aiSettings.base_url" placeholder="http://192.168.3.100:31415/v1" /></label>
+        <label
+          >接口密钥
+          <div class="password-wrap">
+            <input
+              v-model="apiKeyInput"
+              :type="showApiKey ? 'text' : 'password'"
+              placeholder="由自己手动输入，不设默认"
+            />
+            <button type="button" @click="showApiKey = !showApiKey">
+              {{ showApiKey ? '隐藏' : '显示' }}
+            </button>
+          </div>
+        </label>
+        <label>模型<input v-model="store.aiSettings.model" placeholder="auto" /></label>
+        <div class="settings-actions">
+          <button class="primary-btn">保存设置</button>
+          <span v-if="settingsSaved">已保存</span>
+        </div>
+      </form>
+    </div>
 
-      <div class="settings-card">
-        <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="shield" /></div>
-          <div>
-            <h3>退出登录</h3>
-            <p>清除本机的登录状态，下次打开需要重新输入家庭账号和密码。</p>
-          </div>
-        </div>
-        <form class="settings-form" @submit.prevent="logout">
-          <div class="settings-actions"><button class="primary-btn">退出登录</button></div>
-        </form>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="sparkles" /></div>
-          <div>
-            <h3>AI 接口</h3>
-            <p>兼容 OpenAI Chat Completions。</p>
-          </div>
-        </div>
-        <form class="settings-form" @submit.prevent="saveSettings">
-          <label>接口地址<input v-model="store.aiSettings.base_url" /></label>
-          <label
-            >接口密钥
-            <div class="password-wrap">
-              <input
-                v-model="apiKeyInput"
-                :type="showApiKey ? 'text' : 'password'"
-                placeholder="已保存时无需重复填写"
-              />
-              <button type="button" @click="showApiKey = !showApiKey">
-                {{ showApiKey ? '隐藏' : '显示' }}
-              </button>
-            </div>
-          </label>
-          <label>模型<input v-model="store.aiSettings.model" /></label>
-          <div class="settings-actions">
-            <button class="primary-btn">保存设置</button>
-            <span v-if="settingsSaved">已保存</span>
-          </div>
-        </form>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="sparkles" /></div>
-          <div>
-            <h3>AI 数据边界</h3>
-            <p>
-              启用 AI
-              后，会将相关物品的名称、数量、位置等文字交给所配置的服务。照片与附件不会发送。
-            </p>
-          </div>
+    <div class="settings-card">
+      <div class="settings-title">
+        <div class="settings-icon"><AppIcon name="sparkles" /></div>
+        <div>
+          <h3>AI 数据边界</h3>
+          <p>
+            启用 AI
+            后，会将相关物品的名称、数量、位置等文字交给所配置的服务。照片与附件不会发送。
+          </p>
         </div>
       </div>
-
-      <div class="settings-card">
-        <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="refresh" /></div>
-          <div>
-            <h3>RabbitMQ</h3>
-            <p>
-              {{
-                !store.mqStatus.enabled
-                  ? '默认禁用'
-                  : store.mqStatus.connected
-                    ? '已连接'
-                    : '未连接，主功能不受影响'
-              }}
-            </p>
-          </div>
-        </div>
-        <button class="outline-btn" @click="refreshMqStatus">刷新状态</button>
-      </div>
-    </details>
+    </div>
   </div>
 </template>

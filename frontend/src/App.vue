@@ -2,25 +2,35 @@
 import AppShell from './components/AppShell.vue'
 import GlobalModals from './components/GlobalModals.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
-import ConnectionGate from './components/ConnectionGate.vue'
+import SetupGate from './components/SetupGate.vue'
 import AppIcon from './components/AppIcon.vue'
+import { ref } from 'vue'
 import { connection } from './api'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
 import { useToast } from './composables/useToast'
 
-const { installPrompt, installApp, ready, connecting, connect } = useAppBootstrap()
+const { installPrompt, installApp, ready, connect } = useAppBootstrap()
+// 首启初始化只出现一次；之后数据常驻本机，打开即用
+const setupDone = ref(localStorage.getItem('myhouse.setupDone') === '1')
+function onSetupDone() {
+  setupDone.value = true
+  void connect()
+}
 const modals = useItemModals()
 const { toastText } = useToast()
 provideItemModals(modals)
 </script>
 
 <template>
-  <ConnectionGate
-    v-if="!ready || connection.status !== 'online'"
-    :busy="connecting"
-    @reconnect="connect"
-  />
+  <SetupGate v-if="!setupDone" @done="onSetupDone" />
+  <div
+    v-else-if="!ready || connection.status !== 'online'"
+    class="setup-gate"
+    role="status"
+  >
+    <section class="setup-card"><p class="muted">正在加载本地数据…</p></section>
+  </div>
   <div class="app-shell" :inert="!ready || connection.status !== 'online'">
     <AppShell />
 
