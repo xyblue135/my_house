@@ -170,15 +170,6 @@ function formatTime(value?: string | null) {
       </div>
       <form class="modal-form one-col" @submit.prevent="modals.saveContainer(onContainerSaved)">
         <label
-          >归属
-          <select
-            v-model.number="modals.containerForm.owner_id"
-            @change="modals.containerForm.group_id = null"
-          >
-            <option v-for="m in store.members" :key="m.id" :value="m.id">{{ m.name }}</option>
-          </select>
-        </label>
-        <label
           >分组
           <select v-model="modals.containerForm.group_id">
             <option :value="null">未分组</option>
@@ -191,7 +182,6 @@ function formatTime(value?: string | null) {
             required
             placeholder="如：书房抽屉、工具箱"
         /></label>
-        <label>备注<textarea v-model="modals.containerForm.notes" rows="2"></textarea></label>
         <div class="option-panel">
           <b>箱子照片（可选）</b>
           <p class="muted">拍一张箱子外观，方便一眼认出。手机拍照会自动压缩。</p>

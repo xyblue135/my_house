@@ -61,9 +61,13 @@ const filteredContainers = computed(() =>
         : c.group_id === activeGroupId.value),
   ),
 )
-const displayContainers = computed(() =>
-  editingSort.value ? sortList.value : filteredContainers.value,
-)
+const displayContainers = computed(() => {
+  if (editingSort.value) return sortList.value
+  const rows = [...filteredContainers.value]
+  if (sortMode.value === 'name') return rows.sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+  if (sortMode.value === 'count') return rows.sort((a, b) => b.item_count - a.item_count)
+  return rows.sort((a, b) => (b.last_opened_at ?? '').localeCompare(a.last_opened_at ?? ''))
+})
 const currentScopeLabel = computed(() => scopeLabel(myGroups.value))
 const matchingContainers = computed(() =>
   store.containers.filter(
@@ -81,6 +85,32 @@ const scopedResults = computed(() =>
   }),
 )
 const activeGroup = computed(() => myGroups.value.find((g) => g.id === activeGroupId.value))
+
+// ---- 排序三模式：最近打开 → 名称 → 数量，点击循环 ----
+type SortMode = 'recent' | 'name' | 'count'
+const SORT_KEY = 'myhouse.containerSort'
+const SORT_LABEL: Record<SortMode, string> = { recent: '最近打开', name: '名称', count: '数量' }
+const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'recent')
+const sortModeLabel = computed(() => `排序：${SORT_LABEL[sortMode.value]}`)
+function cycleSortMode() {
+  const order: SortMode[] = ['recent', 'name', 'count']
+  sortMode.value = order[(order.indexOf(sortMode.value) + 1) % order.length]
+  localStorage.setItem(SORT_KEY, sortMode.value)
+}
+function groupCount(groupId: number): number {
+  return allContainers.value.filter((c) => c.group_id === groupId).length
+}
+const groupRow = ref<HTMLElement | null>(null)
+function scrollGroups(dir: number) {
+  groupRow.value?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+}
+function touchContainer(id: number): void {
+  void api(`/api/containers/${id}/opened`, { method: 'POST', body: JSON.stringify({}) })
+}
+function openContainer(id: number): void {
+  touchContainer(id)
+  openContainerId.value = id
+}
 watch(activeGroupId, cancelSort)
 watch(query, cancelSort)
 
@@ -250,10 +280,9 @@ onBeforeUnmount(() => {
   <section class="inventory-view view active">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">收好每一份日常</p>
         <h1>家里的物品</h1>
         <p class="page-description">
-          {{ allContainers.length }} 个箱子，{{ totalItems }} 种物品，都有迹可寻。
+          目前收纳 {{ allContainers.length }} 个箱子，{{ totalItems }} 种物品。
         </p>
       </div>
     </div>
@@ -293,12 +322,6 @@ onBeforeUnmount(() => {
         {{ aiBusy ? '处理中…' : '查找' }}
       </button>
       </form>
-      <div class="quick-actions">
-        <button class="primary-btn" @click="openAddItem"><AppIcon name="plus" />添加物品</button>
-        <button class="outline-btn" @click="openAddContainer">
-          <AppIcon name="box" />新建箱子
-        </button>
-      </div>
     </div>
 
     <AiAssistantPanel v-if="aiEnabled" ref="aiPanel" :owner-ids="allOwnerIds" scope-label="全部" @busy="aiBusy = $event" @suggestion="useSuggestion" />
@@ -348,7 +371,7 @@ onBeforeUnmount(() => {
           v-for="container in matchingContainers"
           :key="container.id"
           class="search-result"
-          @click="openContainerId = container.id"
+          @click="openContainer(container.id)"
         >
           <AppIcon name="folder" /><span class="result-copy"
             ><strong>{{ container.name }}</strong
@@ -369,39 +392,41 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <div class="group-tabs" aria-label="按分组筛选">
-        <div class="group-tabs-special">
-          <button
-            class="group-tab special"
-            :class="{ active: activeGroupId === 'all' }"
-            :aria-pressed="activeGroupId === 'all'"
-            @click="activeGroupId = 'all'"
-          >
-            <AppIcon name="grid" :size="15" />全部<span>{{ allContainers.length }}</span>
-          </button>
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向左滚动分组"
+          @click="scrollGroups(-1)"
+        >‹</button>
+        <div ref="groupRow" class="group-tabs-groups">
           <button
             class="group-tab special"
             :class="{ active: activeGroupId === 'ungrouped' }"
             :aria-pressed="activeGroupId === 'ungrouped'"
-            @click="activeGroupId = 'ungrouped'"
+            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
           >
-            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
+            未分组<span>{{ ungroupedCount }}</span>
           </button>
-        </div>
-        <div class="group-tabs-groups">
           <button
             v-for="group in myGroups"
             :key="group.id"
             class="group-tab"
             :class="{ active: activeGroupId === group.id }"
             :aria-pressed="activeGroupId === group.id"
-            @click="activeGroupId = group.id"
+            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
           >
-            {{ group.name }}
+            {{ group.name }}<span>{{ groupCount(group.id) }}</span>
           </button>
           <button class="group-add" @click="groupModal = true">
             <AppIcon name="plus" :size="16" />分组
           </button>
         </div>
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向右滚动分组"
+          @click="scrollGroups(1)"
+        >›</button>
       </div>
       <div class="section-head inventory-section-head">
         <div>
@@ -425,8 +450,13 @@ onBeforeUnmount(() => {
               @click="deleteGroup"
             >
               <AppIcon name="trash" :size="18" /></button
-            ><button v-if="displayContainers.length > 1" class="text-btn" @click="enterSortMode">
-              <AppIcon name="sort" :size="17" />排序</button
+            ><button class="outline-btn compact" @click="openAddContainer">新建箱子</button
+            ><button
+              v-if="displayContainers.length > 1"
+              class="outline-btn compact"
+              @click="cycleSortMode"
+            >
+              {{ sortModeLabel }}</button
             ></template>
         </div>
       </div>
@@ -447,7 +477,7 @@ onBeforeUnmount(() => {
             class="container-open"
             :disabled="editingSort"
             :aria-label="'打开箱子：' + container.name"
-            @click="openContainerId = container.id"
+            @click="openContainer(container.id)"
           >
             <span class="container-cover" :class="'cover-tone-' + (index % 3)"
               ><img

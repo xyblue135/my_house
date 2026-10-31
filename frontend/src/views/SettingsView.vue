@@ -157,7 +157,9 @@ function testSpeak() {
       >
     </div>
 
-    <div class="settings-card">
+    <details class="settings-collapse">
+      <summary>云同步（GitHub / Gitee）<AppIcon name="down" :size="18" /></summary>
+      <div class="settings-card">
       <div class="settings-title">
         <div class="settings-icon"><AppIcon name="download" /></div>
         <div>
@@ -205,7 +207,8 @@ function testSpeak() {
         </div>
         <p v-if="syncSlots[slot].message" class="cloud-message" role="status">{{ syncSlots[slot].message }}</p>
       </div>
-    </div>
+      </div>
+    </details>
 
     <div class="settings-card">
       <div class="settings-title">
@@ -257,7 +260,9 @@ function testSpeak() {
       </div>
     </div>
 
-    <div class="settings-card">
+    <details class="settings-collapse">
+      <summary>AI 接口与数据边界<AppIcon name="down" :size="18" /></summary>
+      <div class="settings-card">
       <div class="settings-title">
         <div class="settings-icon"><AppIcon name="sparkles" /></div>
         <div>
@@ -288,17 +293,18 @@ function testSpeak() {
       </form>
     </div>
 
-    <div class="settings-card">
-      <div class="settings-title">
-        <div class="settings-icon"><AppIcon name="sparkles" /></div>
-        <div>
-          <h3>AI 数据边界</h3>
-          <p>
-            启用 AI
-            后，会将相关物品的名称、数量、位置等文字交给所配置的服务。照片与附件不会发送。
-          </p>
+      <div class="settings-card">
+        <div class="settings-title">
+          <div class="settings-icon"><AppIcon name="sparkles" /></div>
+          <div>
+            <h3>AI 数据边界</h3>
+            <p>
+              启用 AI
+              后，会将相关物品的名称、数量、位置等文字交给所配置的服务。照片与附件不会发送。
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </details>
   </div>
 </template>

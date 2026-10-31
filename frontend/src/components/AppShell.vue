@@ -17,7 +17,7 @@ const current = computed(() => route.name as string)
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark"><AppIcon name="box" :size="24" /></div>
+      <div class="brand-mark"><img class="brand-logo" src="/icons/icon-192.png" alt="" /></div>
       <div class="brand-name">我的家 <small>MY HOUSE</small></div>
     </div>
     <nav class="nav-list" aria-label="主导航" :style="{ '--nav-cols': navItems.length }">

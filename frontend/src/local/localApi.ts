@@ -222,6 +222,11 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
       persist()
       return containerView(container)
     }
+    if (method === 'POST' && seg[3] === 'opened') {
+      container.last_opened_at = now()
+      persist()
+      return { ok: true }
+    }
     if (method === 'DELETE') {
       if (itemsOfLength(container.id) > 0) throw new Error('该箱子里还有物品，请先移动或删除物品')
       for (const att of [...containerAttachments(container.id)]) await removeAttachment(att.id)

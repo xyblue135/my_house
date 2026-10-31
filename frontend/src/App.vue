@@ -4,8 +4,9 @@ import GlobalModals from './components/GlobalModals.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import SetupGate from './components/SetupGate.vue'
 import AppIcon from './components/AppIcon.vue'
-import { ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { connection } from './api'
+import { providers, lastSyncText } from './local/sync'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
 import { useToast } from './composables/useToast'
@@ -13,6 +14,19 @@ import { useToast } from './composables/useToast'
 const { installPrompt, installApp, ready, connect } = useAppBootstrap()
 // 首启初始化只出现一次；之后数据常驻本机，打开即用
 const setupDone = ref(localStorage.getItem('myhouse.setupDone') === '1')
+onMounted(() => { document.addEventListener('click', () => { showSyncInfo.value = false }) })
+// 右上角状态预览：本机数据 + 两个云仓库的配置与最近同步
+const showSyncInfo = ref(false)
+const syncInfo = computed(() => {
+  const gh = providers.github.url ? '已配置' : '未配置'
+  const ge = providers.gitee.url ? '已配置' : '未配置'
+  return [
+    { label: '数据位置', value: '本机（手机/浏览器内）' },
+    { label: 'GitHub', value: gh },
+    { label: 'Gitee', value: ge },
+    { label: '最近同步', value: lastSyncText() },
+  ]
+})
 function onSetupDone() {
   setupDone.value = true
   void connect()
@@ -37,7 +51,7 @@ provideItemModals(modals)
     <main class="main">
       <header class="topbar">
         <div class="mobile-brand">
-          <span class="brand-mark"><AppIcon name="box" :size="21" /></span
+          <span class="brand-mark"><img class="brand-logo" src="/icons/icon-192.png" alt="" /></span
           ><span>物栈<small>把家里的日常，收在一起</small></span>
         </div>
         <div class="desktop-breadcrumb">
@@ -48,7 +62,21 @@ provideItemModals(modals)
           <button v-if="installPrompt" class="ghost-btn install-btn" @click="installApp">
             <AppIcon name="download" :size="17" />添加到桌面
           </button>
-          <span class="online-status"><span></span>已连接</span>
+          <button
+            class="online-status"
+            type="button"
+            aria-label="查看数据与同步信息"
+            @click.stop="showSyncInfo = !showSyncInfo"
+          >
+            <span></span>本机数据
+          </button>
+          <div v-if="showSyncInfo" class="sync-info-pop" @click.stop>
+            <p class="sync-info-title">数据与同步</p>
+            <p v-for="row in syncInfo" :key="row.label" class="sync-info-row">
+              <span>{{ row.label }}</span><b>{{ row.value }}</b>
+            </p>
+            <p class="sync-info-tip">推送 / 拉取在「设置 → 云同步」。</p>
+          </div>
         </div>
       </header>
 

@@ -13,6 +13,7 @@ export interface ContainerRow {
   pos_x: number | null; pos_y: number | null; pos_z: number | null;
   size_w: number | null; size_h: number | null; size_d: number | null;
   sort_order?: number;
+  last_opened_at?: string | null;
   created_at: string; updated_at: string
 }
 export interface ItemRow {
@@ -190,6 +191,18 @@ export async function storeAttachment(
   const row: AttachmentRow = {
     id, item_id: link.item_id ?? null, container_id: link.container_id ?? null, recipe_id: link.recipe_id ?? null,
     kind, filename: file.name || `file-${id}`, mime_type: mime, size_bytes: file.size, created_at: now(),
+  }
+  // 封面只留一张：同实体已有图片时，新图替换旧图（附件字节与元数据一并删除）
+  if (kind === 'image') {
+    const olds = state.attachments.filter((a) =>
+      (link.item_id != null ? a.item_id === link.item_id : link.container_id != null ? a.container_id === link.container_id : link.recipe_id != null && a.recipe_id === link.recipe_id)
+      && a.kind === 'image')
+    for (const old of olds) {
+      state.attachments = state.attachments.filter((a) => a.id !== old.id)
+      await blobDelete(old.id)
+      const oldUrl = blobUrls.get(old.id)
+      if (oldUrl) { URL.revokeObjectURL(oldUrl); blobUrls.delete(old.id) }
+    }
   }
   state.attachments.unshift(row)
   await blobPut(id, { mime, bytes: file })

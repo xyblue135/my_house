@@ -12,6 +12,8 @@ export interface Container {
   /** 房间视图摆位：pos 为底面中心坐标，size 为宽/高/深。单位 1 ≈ 50cm，缺省视为未摆放。 */
   pos_x?: number; pos_y?: number; pos_z?: number;
   size_w?: number; size_h?: number; size_d?: number;
+  /** 最近一次打开详情的时间（本地排序「最近打开」用） */
+  last_opened_at?: string | null;
 }
 
 export interface Item {

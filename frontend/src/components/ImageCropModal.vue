@@ -130,21 +130,32 @@ function filename() {
   return `${base}.jpg`
 }
 
+const processing = ref(false)
+
 async function confirm() {
-  if (!imgEl) return
-  const sx = (crop.x - imgRect.x) / imgRect.w * imgEl.naturalWidth
-  const sy = (crop.y - imgRect.y) / imgRect.h * imgEl.naturalHeight
-  const sw = crop.w / imgRect.w * imgEl.naturalWidth
-  const sh = crop.h / imgRect.h * imgEl.naturalHeight
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(sw))
-  canvas.height = Math.max(1, Math.round(sh))
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92))
-  if (!blob) return
-  emit('confirm', new File([blob], filename(), { type: 'image/jpeg' }))
+  if (!imgEl || processing.value) return
+  processing.value = true
+  try {
+    const sx = (crop.x - imgRect.x) / imgRect.w * imgEl.naturalWidth
+    const sy = (crop.y - imgRect.y) / imgRect.h * imgEl.naturalHeight
+    const sw = crop.w / imgRect.w * imgEl.naturalWidth
+    const sh = crop.h / imgRect.h * imgEl.naturalHeight
+    // 输出限最长边 1600px：大图等比缩小，合成与编码明显更快，封面清晰度足够
+    const MAX = 1600
+    const scale = Math.min(1, MAX / Math.max(sw, sh))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(sw * scale))
+    canvas.height = Math.max(1, Math.round(sh * scale))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    if (!blob) return
+    emit('confirm', new File([blob], filename(), { type: 'image/jpeg' }))
+  } finally {
+    processing.value = false
+  }
 }
 
 async function loadFile(file: File) {
@@ -190,7 +201,7 @@ onBeforeUnmount(() => {
         <button type="button" class="outline-btn compact" @click="rotate(1)">⟳ 右转</button>
         <span class="grow"></span>
         <button type="button" class="outline-btn" @click="emit('skip')">用原图</button>
-        <button class="primary-btn" @click="confirm">裁剪完成</button>
+        <button class="primary-btn" :disabled="processing">{{ processing ? "处理中…" : "裁剪完成" }}</button>
       </div>
     </div>
   </div>

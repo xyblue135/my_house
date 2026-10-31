@@ -250,6 +250,7 @@ video {
   display: none;
 }
 .top-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 18px;
@@ -451,22 +452,35 @@ video {
 }
 .group-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 9px;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 14px;
 }
-.group-tabs-special,
 .group-tabs-groups {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+  scroll-behavior: smooth;
 }
-.group-tabs-special {
-  padding-bottom: 9px;
-  border-bottom: 1px dashed var(--line);
+.group-tabs-groups::-webkit-scrollbar {
+  display: none;
 }
-/* 全部 / 未分组：特殊样式，与普通分组换行区分 */
+.group-scroll-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #667085;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
 .group-tab.special {
   background: #eef3ea;
   color: #38553f;
@@ -2377,6 +2391,17 @@ body.preview-open {
   50% { opacity: 0.55; transform: scale(1.18); }
 }
 
+/* ---- 图片预览关闭按钮：远离右上角边缘，加大热区（手机可达） ---- */
+.preview-close {
+  top: max(18px, env(safe-area-inset-top) + 10px) !important;
+  right: max(18px, env(safe-area-inset-right) + 10px) !important;
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 26px !important;
+  border-radius: 50% !important;
+  background: #10182866 !important;
+}
+
 /* ---- 云备份 / 朗读 设置 ---- */
 .cloud-backup-form {
   display: grid;
@@ -2413,4 +2438,97 @@ body.preview-open {
   .cloud-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---- 右上角数据/同步信息 ---- */
+button.online-status {
+  border: 0;
+  background: #eef3ea;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: #38553f;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+button.online-status > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2e7d32;
+  display: inline-block;
+}
+.sync-info-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px #10182814;
+  padding: 14px 16px;
+  z-index: 500;
+}
+.sync-info-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.sync-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 6px 0;
+}
+.sync-info-row b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.sync-info-tip {
+  font-size: 12px;
+  color: #98a2b3;
+  margin: 8px 0 0;
+}
+
+/* ---- 设置折叠卡 ---- */
+.settings-collapse {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  margin-bottom: 16px;
+  padding: 18px 20px;
+}
+.settings-collapse > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+}
+.settings-collapse > summary::-webkit-details-marker { display: none; }
+.settings-collapse > summary svg { transition: transform 0.15s; }
+.settings-collapse[open] > summary svg { transform: rotate(180deg); }
+.settings-collapse .settings-card {
+  border: 0;
+  padding: 0;
+  margin: 14px 0 0;
+}
+.settings-collapse[open] > summary { margin-bottom: 4px; }
+
+/* ---- 品牌头像（程序内 logo） ---- */
+.brand-mark .brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
