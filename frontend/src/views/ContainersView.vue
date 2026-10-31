@@ -280,7 +280,6 @@ onBeforeUnmount(() => {
   <section class="inventory-view view active">
     <div class="page-heading">
       <div>
-        <h1>家里的物品</h1>
         <p class="page-description">
           目前收纳 {{ allContainers.length }} 个箱子，{{ totalItems }} 种物品。
         </p>
