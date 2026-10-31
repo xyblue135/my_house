@@ -278,11 +278,11 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="inventory-view view active">
-    <div class="page-heading">
-      <div>
-        <p class="page-description">
-          目前收纳 {{ allContainers.length }} 个箱子，{{ totalItems }} 种物品。
-        </p>
+    <div class="home-hero">
+      <div class="hero-stats">
+        <AppIcon name="box" :size="18" />
+        <span>目前收纳 <b>{{ allContainers.length }}</b> 个箱子，<b>{{ totalItems }}</b> 种物品。</span>
+        <AppIcon class="chev" name="right" :size="15" />
       </div>
     </div>
 
@@ -308,18 +308,18 @@ onBeforeUnmount(() => {
         >
           <AppIcon name="mic" :size="19" />
         </button>
-        <button v-if="query" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
+        <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
           <AppIcon name="close" :size="18" />
+        </button>
+        <button class="search-go" type="submit" :disabled="aiBusy || !query.trim()">
+          <AppIcon name="search" :size="16" /><span>查找</span>
         </button>
       </div>
       <label class="ai-search-toggle" :class="{ active: aiEnabled }">
         <input v-model="aiEnabled" type="checkbox" role="switch" :disabled="aiBusy" />
         <span class="toggle-track" aria-hidden="true"></span>
-        <span>AI 查找</span>
+        <span>AI</span>
       </label>
-      <button v-if="aiEnabled" type="submit" class="primary-btn search-submit" :disabled="aiBusy || !query.trim()">
-        {{ aiBusy ? '处理中…' : '查找' }}
-      </button>
       </form>
     </div>
 
@@ -404,7 +404,7 @@ onBeforeUnmount(() => {
             :aria-pressed="activeGroupId === 'ungrouped'"
             @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
           >
-            未分组<span>{{ ungroupedCount }}</span>
+            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
           </button>
           <button
             v-for="group in myGroups"
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
             :aria-pressed="activeGroupId === group.id"
             @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
           >
-            {{ group.name }}<span>{{ groupCount(group.id) }}</span>
+            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
           </button>
           <button class="group-add" @click="groupModal = true">
             <AppIcon name="plus" :size="16" />分组

@@ -4,19 +4,23 @@
 :root {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  color: #263c34;
-  background: #f6f7f2;
+  color: #25352f;
+  background: #f7f8f4;
   font-synthesis: none;
-  --bg: #f6f7f2;
-  --panel: #fff;
-  --ink: #263c34;
-  --muted: #69766e;
-  --primary: #27614d;
-  --primary-dark: #1c493a;
-  --soft: #eaf1e9;
-  --line: #e2e7df;
-  --danger: #ae463d;
+  --bg: #f7f8f4;
+  --panel: #ffffff;
+  --ink: #25352f;
+  --muted: #89918a;
+  --primary: #285f4e;
+  --primary-dark: #1e4a3c;
+  --sage: #a8bda8;
+  --soft: #eef2ec;
+  --line: #e8ebe5;
+  --success: #43875d;
+  --danger: #b4453c;
   --radius: 16px;
+  --r-card: 20px;
+  --r-input: 16px;
   --fs-xs: 12px;
   --fs-sm: 13px;
   --fs-md: 15px;
@@ -2531,4 +2535,227 @@ button.online-status > span {
   height: 100%;
   object-fit: cover;
   border-radius: inherit;
+}
+
+
+/* ================= UI 重构：设计系统落地 ================= */
+
+/* ---- 首页 hero：温和渐变 + 数据概览 pill ---- */
+.home-hero {
+  position: relative;
+  margin: -6px -20px 0;
+  padding: 18px 20px 46px;
+  background: linear-gradient(160deg, #dcead9 0%, #e9f0e4 42%, #f2f4ec 78%, var(--bg) 100%);
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+}
+.home-hero::before,
+.home-hero::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.home-hero::before {
+  width: 190px;
+  height: 190px;
+  right: -60px;
+  top: -70px;
+  background: #cfe0cc66;
+}
+.home-hero::after {
+  width: 120px;
+  height: 120px;
+  right: 120px;
+  bottom: -50px;
+  background: #ffffff59;
+}
+.hero-stats {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: #ffffffd9;
+  border-radius: 999px;
+  padding: 11px 16px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: default;
+  box-shadow: 0 2px 10px #25352f0d;
+}
+.hero-stats b {
+  color: var(--primary);
+  font-weight: 700;
+}
+.hero-stats .chev {
+  color: var(--muted);
+}
+
+/* ---- 搜索：大圆角白底胶囊 + 内嵌深绿查找按钮 ---- */
+.inventory-view .search-box {
+  min-height: 56px;
+  border-radius: 999px;
+  border: 1px solid #e3e8e0;
+  box-shadow: 0 3px 14px #25352f0a;
+  padding: 0 8px 0 16px;
+  gap: 8px;
+}
+.inventory-view .search-box input {
+  font-size: 16px;
+}
+.search-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.15s;
+}
+.search-go:active {
+  transform: scale(0.96);
+}
+.search-go:disabled {
+  opacity: 0.55;
+}
+
+/* ---- AI 卡：轻量助手气泡，紧凑呈现 ---- */
+.ai-inline-results {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  padding: 16px;
+}
+.ai-inline-results .chat-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ai-inline-results .ai-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+}
+.ai-inline-results .bubble {
+  border-radius: 14px;
+  background: var(--soft);
+  padding: 10px 14px;
+  color: var(--ink);
+}
+.ai-inline-results .message.user .bubble {
+  background: var(--primary);
+  color: #fff;
+}
+.ai-inline-results .action-card {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 10px;
+}
+
+/* ---- 分组 chips：白底胶囊卡 + 右箭头，横向滚动 ---- */
+.group-tabs {
+  margin-bottom: 16px;
+}
+.group-tabs-groups {
+  gap: 10px;
+}
+.group-tab,
+.group-add {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 14px;
+  min-height: 44px;
+  padding: 8px 14px;
+  color: var(--ink);
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
+}
+.group-tab > span {
+  background: var(--soft);
+  color: var(--primary);
+  font-weight: 650;
+}
+.group-tab.active {
+  background: #e6efe4;
+  border-color: #b9ccbb;
+  color: var(--primary);
+  font-weight: 700;
+}
+.group-tab.special {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.group-tab.special.active {
+  background: #e6efe4;
+  color: var(--primary);
+}
+.group-tab::after {
+  content: '›';
+  color: var(--muted);
+  font-size: 15px;
+  margin-left: 2px;
+}
+.group-add {
+  border-style: dashed;
+  color: var(--muted);
+}
+.group-add::after {
+  content: none;
+}
+.group-scroll-btn {
+  display: grid;
+  place-items: center;
+}
+
+/* ---- 收纳空间列表卡：统一圆角/间距/轻阴影 ---- */
+.container-rows {
+  gap: 12px;
+}
+.container-card {
+  border-radius: var(--r-card);
+  border-color: var(--line);
+  box-shadow: 0 1px 6px #25352f08;
+}
+.container-card:hover {
+  box-shadow: 0 4px 16px #25352f12;
+}
+.container-open {
+  padding: 12px 14px;
+  gap: 14px;
+}
+
+/* ---- 底部导航：白色圆顶 + 选中浅绿胶囊，兼容手势区 ---- */
+@media (max-width: 700px) {
+  .sidebar {
+    background: #fff;
+    border-top: 1px solid var(--line);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 18px #25352f0a;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .nav-btn {
+    border-radius: 14px;
+    transition: background 0.15s;
+  }
+  .nav-btn:active {
+    background: var(--soft);
+  }
+  .nav-btn.active {
+    background: #e6efe4;
+    color: var(--primary);
+  }
 }
