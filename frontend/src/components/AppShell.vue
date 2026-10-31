@@ -2,20 +2,15 @@
 import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { features } from '../composables/useFeatureToggles'
 
 const router = useRouter()
 const route = useRoute()
 
-const allNavItems = [
+const navItems = [
   { name: 'containers', label: '物品', icon: 'box' },
-  { name: 'space', label: '房间', icon: 'space' },
   { name: 'cooking', label: '菜谱', icon: 'cooking' },
   { name: 'settings', label: '设置', icon: 'settings' },
 ] as const
-const navItems = computed(() => allNavItems.filter(
-  (item) => item.name !== 'space' || features.spaceView,
-))
 const current = computed(() => route.name as string)
 </script>
 

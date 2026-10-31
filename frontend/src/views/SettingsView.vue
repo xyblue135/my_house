@@ -4,7 +4,6 @@ import AppIcon from '../components/AppIcon.vue'
 import { api, getApiBase, setApiBase, setSessionToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
-import { features, setFeature } from '../composables/useFeatureToggles'
 import { searchScope, setSearchScope } from '../composables/useSearchScope'
 import {
   cloudConfig, cloudBusy, cloudMessage, lastBackupTime,
@@ -91,13 +90,6 @@ const currentScopeName = computed(
 function changeScope(event: Event) {
   setSearchScope((event.target as HTMLSelectElement).value)
   toast('查找范围已更新：' + currentScopeName.value)
-}
-
-function toggleSpaceView(event: Event) {
-  setFeature('spaceView', (event.target as HTMLInputElement).checked)
-}
-function toggleCollision(event: Event) {
-  setFeature('collision', (event.target as HTMLInputElement).checked)
 }
 
 // ---- 云备份（GitHub / Gitee / 自定义地址）----
@@ -291,41 +283,6 @@ function testSpeak() {
           <button class="outline-btn" @click="testSpeak">试听</button>
         </div>
       </div>
-    </div>
-
-    <div class="settings-card">
-      <div class="settings-title">
-        <div class="settings-icon"><AppIcon name="space" /></div>
-        <div>
-          <h3>房间视图</h3>
-          <p>在 3D 房间里摆放箱子、调整大小，搜索时高亮它所在的位置。关闭后导航里不再显示入口。</p>
-        </div>
-      </div>
-      <label class="ai-search-toggle" :class="{ active: features.spaceView }">
-        <input
-          type="checkbox"
-          role="switch"
-          :checked="features.spaceView"
-          @change="toggleSpaceView($event)"
-        />
-        <span class="toggle-track" aria-hidden="true"></span>
-        <span>{{ features.spaceView ? '已开启' : '已关闭' }}</span>
-      </label>
-      <label class="settings-switch-row">
-        <span>
-          <b>实体碰撞</b>
-          <em>开启后箱子平面位置重叠时无法保存或移动（默认开启）。</em>
-        </span>
-        <span class="ai-search-toggle" :class="{ active: features.collision }">
-          <input
-            type="checkbox"
-            role="switch"
-            :checked="features.collision"
-            @change="toggleCollision($event)"
-          />
-          <span class="toggle-track" aria-hidden="true"></span>
-        </span>
-      </label>
     </div>
 
     <details class="settings-advanced">

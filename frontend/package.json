@@ -17,8 +17,6 @@
     "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
     "@lucide/vue": "^1.50.0",
-    "@tresjs/core": "^5.9.3",
-    "three": "^0.186.1",
     "vue": "^3.5.18",
     "vue-router": "^4.4.5"
   },

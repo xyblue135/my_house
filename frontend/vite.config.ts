@@ -1,10 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { templateCompilerOptions } from '@tresjs/core'
 
 export default defineConfig({
-  // TresJS 的 <TresXxx> 标签需要在编译期按自定义元素处理，否则会被当成未注册组件
-  plugins: [vue({ ...templateCompilerOptions })],
+  plugins: [vue()],
   server: {
     host: '127.0.0.1',
     port: 15473,
