@@ -4,3 +4,6 @@ project(':capacitor-android').projectDir = new File('../node_modules/.pnpm/@capa
 
 include ':capacitor-community-speech-recognition'
 project(':capacitor-community-speech-recognition').projectDir = new File('../node_modules/.pnpm/@capacitor-community+speech_5241a4d867884ace9fd2ff1ffab2caea/node_modules/@capacitor-community/speech-recognition/android')
+
+include ':capacitor-community-text-to-speech'
+project(':capacitor-community-text-to-speech').projectDir = new File('../node_modules/.pnpm/@capacitor-community+text-t_d349145cef8c20ac4278c97f555ecba0/node_modules/@capacitor-community/text-to-speech/android')

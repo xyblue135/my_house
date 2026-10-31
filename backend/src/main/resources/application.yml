@@ -14,8 +14,9 @@ spring:
           no-cache: true
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 25MB
+      # 恢复云备份时需要上传 SQLite 库与大图片
+      max-file-size: 512MB
+      max-request-size: 512MB
 
 myhouse:
   data-dir: ${MYHOUSE_DATA_DIR:../data}

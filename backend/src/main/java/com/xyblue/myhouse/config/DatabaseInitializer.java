@@ -1,8 +1,13 @@
 package com.xyblue.myhouse.config;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,15 +23,18 @@ public class DatabaseInitializer implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final AttachmentService attachments;
+    private final Path dataDir;
 
-    public DatabaseInitializer(JdbcTemplate jdbc, ObjectMapper objectMapper, AttachmentService attachments) {
+    public DatabaseInitializer(JdbcTemplate jdbc, ObjectMapper objectMapper, AttachmentService attachments, Path myhouseDataDir) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.attachments = attachments;
+        this.dataDir = myhouseDataDir;
     }
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        applyPendingRestore();
         createBaseSchema();
         migrateHousehold();
         migrateGroups();
@@ -349,6 +357,49 @@ public class DatabaseInitializer implements ApplicationRunner {
         jdbc.update("UPDATE household_members SET name = '房间2' WHERE id = 2 AND name = '用户2'");
         jdbc.update("UPDATE household_members SET name = '房间3' WHERE id = 3 AND name = '用户3'");
         jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-rename-members-to-rooms");
+    }
+
+    /**
+     * 云端恢复：/api/restore 把备份文件暂存到 restore-pending/，
+     * 下次启动时在这里替换正式数据库与附件目录（此时还没有任何连接打开过库）。
+     * 替换完成后删除暂存目录；失败则保留暂存等待人工处理，不影响现有数据。
+     */
+    private void applyPendingRestore() {
+        Path pending = dataDir.resolve("restore-pending");
+        Path pendingDb = pending.resolve("inventory.db");
+        if (!Files.isRegularFile(pendingDb)) return;
+        try {
+            byte[] header = new byte[16];
+            try (InputStream in = Files.newInputStream(pendingDb)) {
+                if (in.read(header) != header.length) throw new IOException("备份库文件过小");
+            }
+            if (!new String(header, java.nio.charset.StandardCharsets.UTF_8).startsWith("SQLite format 3")) {
+                throw new IOException("备份库文件不是有效的 SQLite 数据库");
+            }
+            Files.deleteIfExists(dataDir.resolve("inventory.db-wal"));
+            Files.deleteIfExists(dataDir.resolve("inventory.db-shm"));
+            Files.move(pendingDb, dataDir.resolve("inventory.db"), StandardCopyOption.REPLACE_EXISTING);
+            Path pendingAttachments = pending.resolve("attachments");
+            if (Files.isDirectory(pendingAttachments)) {
+                // 整目录替换：保留 stored_name 的子目录结构（container-1/xxx.jpg 等）
+                Path attachmentsDir = dataDir.resolve("attachments");
+                deleteRecursively(attachmentsDir);
+                Files.move(pendingAttachments, attachmentsDir);
+            }
+            deleteRecursively(pending);
+            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class).info("已应用云端恢复的备份，本次启动使用恢复的数据");
+        } catch (Exception ex) {
+            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class).error("应用恢复备份失败（保留暂存目录 restore-pending）: {}", ex.getMessage());
+        }
+    }
+
+    private void deleteRecursively(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) return;
+        try (Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (IOException ignored) { }
+            });
+        }
     }
 
     private void createV08Schema() {

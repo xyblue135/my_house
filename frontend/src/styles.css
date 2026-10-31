@@ -2376,3 +2376,41 @@ body.preview-open {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(1.18); }
 }
+
+/* ---- 云备份 / 朗读 设置 ---- */
+.cloud-backup-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.cloud-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.cloud-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #344054;
+}
+.cloud-grid input,
+.cloud-backup-form > label select,
+.cloud-backup-form > label input {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+.cloud-message {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+@media (max-width: 700px) {
+  .cloud-grid {
+    grid-template-columns: 1fr;
+  }
+}

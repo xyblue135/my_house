@@ -6,6 +6,7 @@ import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
 import { containerInScope, scopeLabel } from '../composables/useSearchScope'
 import { useVoiceInput } from '../composables/useVoiceInput'
+import { speak } from '../composables/useSpeech'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
@@ -117,6 +118,15 @@ function submitSearch(event?: Event) {
 function useSuggestion(text: string) {
   query.value = text
   submitSearch()
+}
+function speakResults() {
+  const names = scopedResults.value.slice(0, 20).map((item) => item.name)
+  const boxes = matchingContainers.value.slice(0, 10).map((c) => c.name)
+  const parts: string[] = []
+  if (names.length) parts.push(`找到${names.length}件物品：${names.join('，')}`)
+  if (boxes.length) parts.push(`相关箱子：${boxes.join('，')}`)
+  if (!parts.length) parts.push('没有找到对应的物品')
+  void speak(parts.join('。')).catch((error) => toast((error as Error).message))
 }
 
 function openAddContainer() {
@@ -299,6 +309,9 @@ onBeforeUnmount(() => {
           <h2>搜索结果</h2>
           <p>范围：{{ currentScopeLabel }} 的物品和箱子（范围在设置里调整）</p>
         </div>
+        <button class="icon-btn plain" aria-label="朗读搜索结果" title="朗读搜索结果" @click="speakResults">
+          <AppIcon name="volume" :size="19" />
+        </button>
       </div>
       <p v-if="searching" class="inline-notice" role="status">正在查找…</p>
       <p v-else-if="searchError" class="inline-notice error" role="alert">{{ searchError }}</p>
