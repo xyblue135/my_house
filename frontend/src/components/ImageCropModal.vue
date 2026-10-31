@@ -1,48 +1,64 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { fixImageOrientation } from '../utils/image'
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 const props = defineProps<{ file: File }>()
 const emit = defineEmits<{ confirm: [File]; skip: []; cancel: [] }>()
 
 const stageRef = ref<HTMLDivElement | null>(null)
 const imgUrl = ref('')
+const processing = ref(false)
 
 // 图片在裁剪区内的显示区域（stage 坐标）
 const imgRect = reactive({ x: 0, y: 0, w: 0, h: 0 })
 // 选区（stage 坐标）
 const crop = reactive({ x: 0, y: 0, w: 0, h: 0 })
 
-let imgEl: HTMLImageElement | null = null
+// 绘制源：优先 ImageBitmap（createImageBitmap 原生纠正 EXIF，
+// 避免打开时对 1200 万像素原图做一次完整的重编码）
+let drawSource: ImageBitmap | HTMLImageElement | null = null
 let dragging = false
 let dragMode = 'move'
 let startX = 0
 let startY = 0
 let startCrop = { x: 0, y: 0, w: 0, h: 0 }
+let objectUrl: string | null = null
 
 const MIN = 24
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('图片解码失败'))
-    img.src = url
-  })
+function dims(): { w: number; h: number } {
+  if (!drawSource) return { w: 1, h: 1 }
+  return { w: drawSource.width, h: drawSource.height }
 }
 
-async function applyImage(url: string) {
-  const img = await loadImage(url)
-  imgEl = img
+async function sourceFromBlob(blob: Blob): Promise<void> {
+  try {
+    drawSource = await createImageBitmap(blob, { imageOrientation: 'from-image' })
+    return
+  } catch { /* 老内核不支持，回退 <img> 解码 */ }
+  const url = URL.createObjectURL(blob)
+  try {
+    drawSource = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('图片解码失败'))
+      image.src = url
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function applySource(): Promise<void> {
+  if (!drawSource || !stageRef.value) return
   const stage = stageRef.value
-  if (!stage) return
+  const { w: nw, h: nh } = dims()
   const sw = stage.clientWidth
   const sh = stage.clientHeight
-  const scale = Math.min(sw / img.naturalWidth, sh / img.naturalHeight, 1)
-  const w = img.naturalWidth * scale
-  const h = img.naturalHeight * scale
+  const scale = Math.min(sw / nw, sh / nh, 1)
+  const w = nw * scale
+  const h = nh * scale
   imgRect.x = (sw - w) / 2
   imgRect.y = (sh - h) / 2
   imgRect.w = w
@@ -57,21 +73,32 @@ async function applyImage(url: string) {
 }
 
 async function rotate(dir: 1 | -1) {
-  if (!imgEl) return
-  const canvas = document.createElement('canvas')
-  canvas.width = imgEl.naturalHeight
-  canvas.height = imgEl.naturalWidth
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.translate(canvas.width / 2, canvas.height / 2)
-  ctx.rotate((dir * Math.PI) / 2)
-  ctx.drawImage(imgEl, -imgEl.naturalWidth / 2, -imgEl.naturalHeight / 2)
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
-  // 关键：旋转后必须同步更新 imgUrl，否则 <img> 仍显示旧图，
-  // 却被 applyImage 套上新尺寸（宽高已交换），旧图被拉伸变形。
-  if (imgUrl.value) URL.revokeObjectURL(imgUrl.value)
-  imgUrl.value = dataUrl
-  await applyImage(dataUrl)
+  if (!drawSource || processing.value) return
+  processing.value = true
+  try {
+    const { w, h } = dims()
+    // 限最长边 3200，控制旋转编码耗时
+    const cap = Math.min(1, 3200 / Math.max(w, h))
+    const cw = Math.max(1, Math.round(w * cap))
+    const ch = Math.max(1, Math.round(h * cap))
+    const canvas = document.createElement('canvas')
+    canvas.width = ch
+    canvas.height = cw
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.rotate((dir * Math.PI) / 2)
+    ctx.drawImage(drawSource, -cw / 2, -ch / 2, cw, ch)
+    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.92))
+    if (!blob) return
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+    objectUrl = URL.createObjectURL(blob)
+    imgUrl.value = objectUrl
+    await sourceFromBlob(blob)
+    await applySource()
+  } finally {
+    processing.value = false
+  }
 }
 
 function onPointerDown(e: PointerEvent, mode: string) {
@@ -130,17 +157,16 @@ function filename() {
   return `${base}.jpg`
 }
 
-const processing = ref(false)
-
 async function confirm() {
-  if (!imgEl || processing.value) return
+  if (!drawSource || processing.value) return
   processing.value = true
   try {
-    const sx = (crop.x - imgRect.x) / imgRect.w * imgEl.naturalWidth
-    const sy = (crop.y - imgRect.y) / imgRect.h * imgEl.naturalHeight
-    const sw = crop.w / imgRect.w * imgEl.naturalWidth
-    const sh = crop.h / imgRect.h * imgEl.naturalHeight
-    // 输出限最长边 1600px：大图等比缩小，合成与编码明显更快，封面清晰度足够
+    const { w: nw, h: nh } = dims()
+    const sx = (crop.x - imgRect.x) / imgRect.w * nw
+    const sy = (crop.y - imgRect.y) / imgRect.h * nh
+    const sw = crop.w / imgRect.w * nw
+    const sh = crop.h / imgRect.h * nh
+    // 输出限最长边 1600px：唯一一次编码，大图等比缩小
     const MAX = 1600
     const scale = Math.min(1, MAX / Math.max(sw, sh))
     const canvas = document.createElement('canvas')
@@ -149,7 +175,7 @@ async function confirm() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(drawSource, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
     if (!blob) return
     emit('confirm', new File([blob], filename(), { type: 'image/jpeg' }))
@@ -159,22 +185,24 @@ async function confirm() {
 }
 
 async function loadFile(file: File) {
-  const oriented = await fixImageOrientation(file)
-  if (imgUrl.value) URL.revokeObjectURL(imgUrl.value)
-  imgUrl.value = URL.createObjectURL(oriented)
-  try { await applyImage(imgUrl.value) } catch { /* ignore decode errors */ }
+  if (objectUrl) URL.revokeObjectURL(objectUrl)
+  objectUrl = URL.createObjectURL(file)
+  imgUrl.value = objectUrl
+  drawSource = null
+  await sourceFromBlob(file)
+  await applySource()
 }
 
-onMounted(() => { loadFile(props.file) })
+onMounted(() => { void loadFile(props.file) })
 
 // 队列里切到下一张图时 props.file 会变，组件不重挂载，需要手动重新加载
-watch(() => props.file, (f) => { loadFile(f) })
+watch(() => props.file, (f) => { void loadFile(f) })
 
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('pointercancel', onPointerUp)
-  if (imgUrl.value) URL.revokeObjectURL(imgUrl.value)
+  if (objectUrl) URL.revokeObjectURL(objectUrl)
 })
 </script>
 

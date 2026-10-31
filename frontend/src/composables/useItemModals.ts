@@ -243,6 +243,7 @@ function createItemModalsImpl(): ItemModals {
       else containerPendingFiles.value.push(...compressed)
       updatePreviews(target)
     }
+    // 图片不再预压缩：裁剪器内部会做唯一一次编码（EXIF 纠正 + 限长边 1600 + JPEG 0.85）
     if (images.length) {
       cropTarget.value = target
       cropQueue.value.push(...images)
@@ -251,11 +252,13 @@ function createItemModalsImpl(): ItemModals {
   }
 
   async function onCropConfirm(cropped: File) {
-    addPending(await compressImage(cropped), cropTarget.value)
+    // 裁剪器输出已是最终形态（≤1600px JPEG），跳过二次压缩
+    addPending(cropped, cropTarget.value)
     processCropQueue()
   }
 
   async function onCropSkip() {
+    // 用原图：保留 EXIF 纠正 + 压缩（仅此路径需要）
     if (cropFile.value) addPending(await compressImage(cropFile.value), cropTarget.value)
     processCropQueue()
   }
