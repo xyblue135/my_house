@@ -5,6 +5,7 @@ import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
 import { containerInScope, scopeLabel } from '../composables/useSearchScope'
+import { useVoiceInput } from '../composables/useVoiceInput'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
@@ -21,6 +22,18 @@ const query = ref('')
 const aiEnabled = ref(false)
 const aiBusy = ref(false)
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
+// 语音输入只在安卓 App 里显示（原生语音识别），网页端隐藏
+const voice = useVoiceInput()
+function onVoice() {
+  void voice.toggle({
+    partial: (text) => { query.value = text },
+    final: (text) => {
+      query.value = text
+      if (text.trim()) submitSearch()
+    },
+    error: (message) => toast(message),
+  })
+}
 // 房间概念已下线：AI 始终在全库范围查找
 const allOwnerIds = computed(() => store.members.map((member) => member.id))
 const searchResults = ref<Item[]>([])
@@ -247,6 +260,16 @@ onBeforeUnmount(() => {
           aria-label="搜索物品或箱子"
           @keydown.enter.prevent="submitSearch($event)"
         />
+        <button
+          v-if="voice.supported"
+          type="button"
+          class="icon-btn plain mic-btn"
+          :class="{ listening: voice.listening.value }"
+          :aria-label="voice.listening.value ? '停止语音输入' : '语音输入'"
+          @click.prevent="onVoice"
+        >
+          <AppIcon name="mic" :size="19" />
+        </button>
         <button v-if="query" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
           <AppIcon name="close" :size="18" />
         </button>

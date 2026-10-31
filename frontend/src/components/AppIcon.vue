@@ -32,6 +32,7 @@ import {
   CircleHelp,
   Wifi,
   Cuboid,
+  Mic,
 } from '@lucide/vue'
 const icons = {
   box: Package,
@@ -66,6 +67,7 @@ const icons = {
   grid: LayoutGrid,
   help: CircleHelp,
   wifi: Wifi,
+  mic: Mic,
 }
 withDefaults(defineProps<{ name: keyof typeof icons; size?: number }>(), { size: 20 })
 </script>

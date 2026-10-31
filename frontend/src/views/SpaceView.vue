@@ -8,6 +8,7 @@ import { useAppStore } from '../store'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
 import { features } from '../composables/useFeatureToggles'
+import { useVoiceInput } from '../composables/useVoiceInput'
 import type { Container, Item, SpaceBox } from '../types'
 
 // 房间 16x16 格；1 格 ≈ 50cm。
@@ -18,6 +19,15 @@ const MAX_SIZE = 12
 const store = useAppStore()
 const { refreshData } = useAppBootstrap()
 const { toast } = useToast()
+// 语音找箱子：说话 → 填入搜索 → 自动高亮定位（仅安卓 App 显示）
+const voice = useVoiceInput()
+function onVoice() {
+  void voice.toggle({
+    partial: (text) => { query.value = text },
+    final: (text) => { query.value = text },
+    error: (message) => toast(message),
+  })
+}
 
 const active = ref(true)
 onActivated(() => { active.value = true })
@@ -342,6 +352,16 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
           <div class="space-search">
             <AppIcon name="search" :size="18" />
             <input v-model="query" type="search" placeholder="找物品，高亮它在房间里的位置" aria-label="在房间视图搜索" />
+            <button
+              v-if="voice.supported"
+              type="button"
+              class="mic-btn"
+              :class="{ listening: voice.listening.value }"
+              :aria-label="voice.listening.value ? '停止语音输入' : '语音输入'"
+              @click.prevent="onVoice"
+            >
+              <AppIcon name="mic" :size="17" />
+            </button>
             <button v-if="query" type="button" aria-label="清空搜索" @click="query = ''">
               <AppIcon name="close" :size="16" />
             </button>
