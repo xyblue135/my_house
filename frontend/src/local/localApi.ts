@@ -429,7 +429,7 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
   if (path === '/api/mq/status') {
     return { enabled: false, connected: false, url: '—', exchange: '—', queue: '—', last_error: '', client: '' }
   }
-  if (path === '/api/ai/chat' && method === 'POST') {
+  if ((path === '/api/ai/chat' || path === '/api/chat') && method === 'POST') {
     return await aiChat(str(b.message))
   }
   if (path === '/api/ai/execute' && method === 'POST') {
