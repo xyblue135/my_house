@@ -287,30 +287,73 @@ onBeforeUnmount(() => {
 <template>
   <section class="inventory-view view active">
     <div class="home-hero">
-      <svg class="hero-scene" viewBox="0 0 340 170" fill="none" aria-hidden="true" preserveAspectRatio="xMaxYMax meet">
-        <!-- 云 -->
-        <ellipse cx="52" cy="30" rx="36" ry="12" fill="#ffffff8c" />
-        <ellipse cx="108" cy="18" rx="26" ry="9" fill="#ffffff70" />
+      <svg class="hero-scene" viewBox="0 0 360 190" fill="none" aria-hidden="true" preserveAspectRatio="xMaxYMax meet">
+        <defs>
+          <linearGradient id="hs-wall" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffffff" />
+            <stop offset="1" stop-color="#eef4ec" />
+          </linearGradient>
+          <linearGradient id="hs-roof" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#a9cbb1" />
+            <stop offset="1" stop-color="#7ea88a" />
+          </linearGradient>
+          <linearGradient id="hs-boxface" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f2d9a8" />
+            <stop offset="1" stop-color="#dfb878" />
+          </linearGradient>
+          <filter id="hs-soft" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" />
+          </filter>
+        </defs>
+
+        <!-- 远景云：缓慢漂移 -->
+        <g class="hs-cloud">
+          <ellipse cx="60" cy="26" rx="42" ry="13" fill="#ffffffa8" />
+          <ellipse cx="98" cy="17" rx="26" ry="10" fill="#ffffff8c" />
+        </g>
+        <g class="hs-cloud hs-cloud-b">
+          <ellipse cx="298" cy="32" rx="36" ry="11" fill="#ffffff7d" />
+        </g>
+
         <!-- 地面 -->
-        <ellipse cx="190" cy="152" rx="170" ry="30" fill="#ffffff7a" />
-        <!-- 小树 -->
-        <circle cx="46" cy="118" r="24" fill="#bcd9bf" />
-        <circle cx="62" cy="106" r="16" fill="#c9e0cb" />
-        <rect x="42" y="134" width="9" height="16" rx="3" fill="#a8bda8" />
-        <!-- 小房子 -->
-        <rect x="148" y="76" width="90" height="68" rx="6" fill="#ffffff" />
-        <polygon points="138,78 193,42 248,78" fill="#bfd8c4" />
-        <rect x="160" y="98" width="20" height="32" rx="3" fill="#cfe3d4" />
-        <rect x="196" y="92" width="26" height="20" rx="3" fill="#dcead9" />
-        <rect x="200" y="96" width="18" height="16" rx="2" fill="#eef4ea" />
-        <!-- 纸箱 -->
-        <rect x="246" y="110" width="54" height="42" rx="4" fill="#e8c795" />
-        <rect x="246" y="102" width="54" height="12" rx="4" fill="#f0d6a8" />
-        <rect x="269" y="102" width="8" height="50" fill="#d9b47e" />
-        <rect x="256" y="120" width="34" height="13" rx="2" fill="#ffffff4d" />
-        <!-- 星光 -->
-        <rect x="304" y="64" width="13" height="13" rx="3.5" fill="#f4c95d" transform="rotate(12 310 70)" />
-        <rect x="292" y="84" width="9" height="9" rx="2.5" fill="#f4c95d99" transform="rotate(-10 296 88)" />
+        <ellipse cx="205" cy="158" rx="175" ry="26" fill="#ffffff70" />
+
+        <!-- 小树：轻轻摇曳 -->
+        <g class="hs-tree">
+          <circle cx="44" cy="110" r="25" fill="#b5d4ba" />
+          <circle cx="62" cy="98" r="17" fill="#c6ddc9" />
+          <rect x="40" y="130" width="9" height="17" rx="3" fill="#a8bda8" />
+        </g>
+
+        <!-- 小房子：渐变墙体 + 柔和落影 -->
+        <ellipse cx="192" cy="150" rx="60" ry="10" fill="#25352f" opacity="0.09" filter="url(#hs-soft)" />
+        <g class="hs-house">
+          <rect x="146" y="78" width="92" height="70" rx="7" fill="url(#hs-wall)" />
+          <polygon points="136,80 192,44 248,80" fill="url(#hs-roof)" />
+          <rect x="158" y="98" width="21" height="34" rx="4" fill="#cfe3d4" />
+          <rect x="196" y="92" width="27" height="21" rx="4" fill="#e7efe6" />
+          <rect x="200" y="96" width="19" height="17" rx="2.5" fill="#f6f9f4" />
+        </g>
+
+        <!-- 纸箱：渐变盒面 + 轻轻浮动 -->
+        <ellipse cx="272" cy="152" rx="34" ry="7" fill="#25352f" opacity="0.08" filter="url(#hs-soft)" />
+        <g class="hs-box">
+          <rect x="244" y="106" width="56" height="44" rx="5" fill="url(#hs-boxface)" />
+          <rect x="244" y="98" width="56" height="13" rx="5" fill="#f4ddb0" />
+          <rect x="268" y="98" width="9" height="52" fill="#d3a86e" />
+          <rect x="258" y="118" width="28" height="12" rx="2.5" fill="#ffffff59" />
+        </g>
+
+        <!-- 星光：错峰闪烁（旋转在父级 g 上，动画只做缩放） -->
+        <g transform="rotate(12 313 65)">
+          <rect class="hs-sparkle" x="306" y="58" width="14" height="14" rx="4" fill="#f4c95d" />
+        </g>
+        <g transform="rotate(-10 296 86)">
+          <rect class="hs-sparkle hs-d1" x="292" y="82" width="9" height="9" rx="2.5" fill="#f4c95d" opacity="0.7" />
+        </g>
+        <g transform="rotate(20 321 91)">
+          <rect class="hs-sparkle hs-d2" x="318" y="88" width="7" height="7" rx="2" fill="#f4c95d" opacity="0.5" />
+        </g>
       </svg>
       <div class="hero-stats">
         <AppIcon name="box" :size="18" />

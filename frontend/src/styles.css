@@ -2803,3 +2803,48 @@ button.online-status > span {
   align-items: center;
   gap: 8px;
 }
+
+/* ---- hero 场景动画（克制、可随系统关闭） ---- */
+.hs-scene g,
+.hs-scene rect {
+  transform-box: fill-box;
+}
+.hs-cloud {
+  animation: hs-drift 16s ease-in-out infinite alternate;
+}
+.hs-cloud-b {
+  animation-duration: 23s;
+  animation-delay: -8s;
+}
+@keyframes hs-drift {
+  from { transform: translateX(-8px); }
+  to { transform: translateX(10px); }
+}
+.hs-box {
+  animation: hs-bob 4.2s ease-in-out infinite;
+}
+@keyframes hs-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.hs-tree {
+  transform-origin: 50% 100%;
+  animation: hs-sway 7s ease-in-out infinite;
+}
+@keyframes hs-sway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.8deg); }
+}
+.hs-sparkle {
+  transform-origin: center;
+  animation: hs-twinkle 2.8s ease-in-out infinite;
+}
+.hs-d1 { animation-delay: -0.9s; }
+.hs-d2 { animation-delay: -1.8s; }
+@keyframes hs-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.72); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hs-cloud, .hs-box, .hs-tree, .hs-sparkle { animation: none; }
+}
