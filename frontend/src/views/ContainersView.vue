@@ -100,6 +100,14 @@ function cycleSortMode() {
 function groupCount(groupId: number): number {
   return allContainers.value.filter((c) => c.group_id === groupId).length
 }
+
+// ---- 收纳空间默认折叠（记住用户的手动展开/收起） ----
+const storageOpen = ref(localStorage.getItem('myhouse.storageOpen') === '1')
+function onStorageToggle(event: Event): void {
+  const open = (event.target as HTMLDetailsElement).open
+  storageOpen.value = open
+  localStorage.setItem('myhouse.storageOpen', open ? '1' : '0')
+}
 const groupRow = ref<HTMLElement | null>(null)
 function scrollGroups(dir: number) {
   groupRow.value?.scrollBy({ left: dir * 240, behavior: 'smooth' })
@@ -279,6 +287,31 @@ onBeforeUnmount(() => {
 <template>
   <section class="inventory-view view active">
     <div class="home-hero">
+      <svg class="hero-scene" viewBox="0 0 340 170" fill="none" aria-hidden="true" preserveAspectRatio="xMaxYMax meet">
+        <!-- 云 -->
+        <ellipse cx="52" cy="30" rx="36" ry="12" fill="#ffffff8c" />
+        <ellipse cx="108" cy="18" rx="26" ry="9" fill="#ffffff70" />
+        <!-- 地面 -->
+        <ellipse cx="190" cy="152" rx="170" ry="30" fill="#ffffff7a" />
+        <!-- 小树 -->
+        <circle cx="46" cy="118" r="24" fill="#bcd9bf" />
+        <circle cx="62" cy="106" r="16" fill="#c9e0cb" />
+        <rect x="42" y="134" width="9" height="16" rx="3" fill="#a8bda8" />
+        <!-- 小房子 -->
+        <rect x="148" y="76" width="90" height="68" rx="6" fill="#ffffff" />
+        <polygon points="138,78 193,42 248,78" fill="#bfd8c4" />
+        <rect x="160" y="98" width="20" height="32" rx="3" fill="#cfe3d4" />
+        <rect x="196" y="92" width="26" height="20" rx="3" fill="#dcead9" />
+        <rect x="200" y="96" width="18" height="16" rx="2" fill="#eef4ea" />
+        <!-- 纸箱 -->
+        <rect x="246" y="110" width="54" height="42" rx="4" fill="#e8c795" />
+        <rect x="246" y="102" width="54" height="12" rx="4" fill="#f0d6a8" />
+        <rect x="269" y="102" width="8" height="50" fill="#d9b47e" />
+        <rect x="256" y="120" width="34" height="13" rx="2" fill="#ffffff4d" />
+        <!-- 星光 -->
+        <rect x="304" y="64" width="13" height="13" rx="3.5" fill="#f4c95d" transform="rotate(12 310 70)" />
+        <rect x="292" y="84" width="9" height="9" rx="2.5" fill="#f4c95d99" transform="rotate(-10 296 88)" />
+      </svg>
       <div class="hero-stats">
         <AppIcon name="box" :size="18" />
         <span>目前收纳 <b>{{ allContainers.length }}</b> 个箱子，<b>{{ totalItems }}</b> 种物品。</span>
@@ -427,38 +460,44 @@ onBeforeUnmount(() => {
           @click="scrollGroups(1)"
         >›</button>
       </div>
-      <div class="section-head inventory-section-head">
-        <div>
-          <h2>
+      <details
+        class="storage-fold"
+        :open="storageOpen"
+        @toggle="onStorageToggle($event)"
+      >
+        <summary>
+          <span class="fold-title">
             {{ activeGroup?.name || (activeGroupId === 'ungrouped' ? '未分组' : '收纳空间')
             }}<span class="count-label">{{ displayContainers.length }}</span>
-          </h2>
-        </div>
-        <div class="inline-actions">
-          <template v-if="editingSort"
-            ><button class="text-btn" :disabled="savingSort" @click="cancelSort">取消</button
-            ><button class="primary-btn compact" :disabled="savingSort" @click="saveSort">
-              保存顺序
-            </button></template
-          >
-          <template v-else
-            ><button
-              v-if="activeGroup"
-              class="icon-btn plain danger"
-              aria-label="删除当前分组"
-              @click="deleteGroup"
+          </span>
+          <span class="inline-actions" @click.stop.prevent>
+            <template v-if="editingSort"
+              ><button class="text-btn" :disabled="savingSort" @click="cancelSort">取消</button
+              ><button class="primary-btn compact" :disabled="savingSort" @click="saveSort">
+                保存顺序
+              </button></template
             >
-              <AppIcon name="trash" :size="18" /></button
-            ><button class="outline-btn compact" @click="openAddContainer">新建箱子</button
-            ><button
-              v-if="displayContainers.length > 1"
-              class="outline-btn compact"
-              @click="cycleSortMode"
+            <template v-else
+              ><button
+                v-if="activeGroup"
+                class="icon-btn plain danger"
+                aria-label="删除当前分组"
+                @click="deleteGroup"
+              >
+                <AppIcon name="trash" :size="18" /></button
+              ><button class="outline-btn compact" @click="openAddContainer">新建箱子</button
+              ><button
+                v-if="displayContainers.length > 1"
+                class="outline-btn compact"
+                @click="cycleSortMode"
+              >
+                {{ sortModeLabel }}</button
+              ></template
             >
-              {{ sortModeLabel }}</button
-            ></template>
-        </div>
-      </div>
+          </span>
+          <AppIcon class="fold-chev" name="down" :size="18" />
+        </summary>
+        <div class="fold-body">
       <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>
       <div v-if="displayContainers.length" class="container-rows">
         <article
@@ -525,6 +564,8 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <p v-if="displayContainers.length" class="list-end">收好的是物品，也是日常。</p>
+        </div>
+      </details>
     </template>
   </section>
   <ContainerDetailModal :container-id="openContainerId" @close="openContainerId = null" />
