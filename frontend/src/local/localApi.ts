@@ -417,7 +417,8 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
 
   // ---- settings / mq / ai ----
   if (path === '/api/settings' && method === 'GET') {
-    return { base_url: state.ai.base_url, model: state.ai.model, has_api_key: !!state.ai.api_key }
+    // 单机模式：密钥保存在本机，回传给本机 UI 做星号回显
+    return { base_url: state.ai.base_url, model: state.ai.model, has_api_key: !!state.ai.api_key, api_key: state.ai.api_key }
   }
   if (path === '/api/settings' && method === 'POST') {
     if (b.base_url != null) state.ai.base_url = str(b.base_url)

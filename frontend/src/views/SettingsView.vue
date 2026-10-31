@@ -47,7 +47,10 @@ async function saveSettings() {
 
 onMounted(async () => {
   try {
-    Object.assign(store.aiSettings, await api<AiSettings>('/api/settings'))
+    const saved = await api<AiSettings & { api_key?: string }>('/api/settings')
+    Object.assign(store.aiSettings, saved)
+    // 本机已存密钥：以密码点回显（可重新输入覆盖）
+    if (saved.api_key) apiKeyInput.value = saved.api_key
   } catch (error) {
     toast((error as Error).message)
   }
