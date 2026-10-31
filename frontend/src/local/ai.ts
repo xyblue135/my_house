@@ -3,7 +3,35 @@
  * 协议与原服务端 AiService 一致：严格 JSON {reply, action}，识别失败降级本地关键词检索。
  * base_url 示例：http://192.168.3.100:31415/v1（网关在电脑上时手机填电脑局域网 IP）
  */
+import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { state, containerView, itemView, requireContainer, requireItem, nextId, now, logHistory, persist } from './state'
+
+const isNative = Capacitor.isNativePlatform()
+
+/** 网关请求：App 内走原生 HTTP（绕过 WebView 的 CORS 与混合内容限制），网页走 fetch。 */
+async function gatewayRequest(path: string, init: { method: string; jsonBody?: unknown }): Promise<{ status: number; data: any }> {
+  const base = state.ai.base_url.trim().replace(/\/$/, '')
+  const url = `${base}${path}`
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (state.ai.api_key) headers.Authorization = `Bearer ${state.ai.api_key}`
+  if (isNative) {
+    const res = await CapacitorHttp.request({
+      url, method: init.method, headers,
+      data: init.jsonBody ?? undefined,
+      responseType: 'json',
+      readTimeout: 120000, connectTimeout: 15000,
+    })
+    return { status: res.status, data: res.data }
+  }
+  const res = await fetch(url, {
+    method: init.method, headers,
+    body: init.jsonBody ? JSON.stringify(init.jsonBody) : undefined,
+  })
+  const text = await res.text()
+  let data: unknown = text
+  try { data = JSON.parse(text) } catch { /* 保留原文 */ }
+  return { status: res.status, data }
+}
 
 interface AiAction { type: string; item_id?: number; container_id?: number; data?: Record<string, unknown> }
 interface ChatResult { reply: string; action: AiAction | null; mode: 'ai' | 'local' }
@@ -31,24 +59,19 @@ const SYSTEM_PROMPT = `你是"我的家"家庭物品数据库助手。根据下�
 严格只输出 JSON：{"reply":"中文回复","action":null或action对象}`
 
 async function callGateway(message: string): Promise<ChatResult> {
-  const base = state.ai.base_url.trim().replace(/\/$/, '')
-  if (!base) throw new Error('AI 接口地址未配置（设置 → AI 接口）')
-  const res = await fetch(`${base}/chat/completions`, {
+  if (!state.ai.base_url.trim()) throw new Error('AI 接口地址未配置（设置 → AI 接口）')
+  const res = await gatewayRequest('/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(state.ai.api_key ? { Authorization: `Bearer ${state.ai.api_key}` } : {}),
-    },
-    body: JSON.stringify({
+    jsonBody: {
       model: state.ai.model || 'auto',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT + '\n\n' + context() },
         { role: 'user', content: message },
       ],
-    }),
+    },
   })
-  if (!res.ok) throw new Error(`AI 接口返回 HTTP ${res.status}`)
-  const payload = await res.json()
+  if (res.status < 200 || res.status >= 300) throw new Error(`AI 接口返回 HTTP ${res.status}`)
+  const payload = res.data as Record<string, any>
   const content = String(payload?.choices?.[0]?.message?.content ?? '')
   const start = content.indexOf('{')
   const end = content.lastIndexOf('}')
@@ -161,5 +184,20 @@ export function aiExecute(action: AiAction): { reply: string } {
     }
     default:
       throw new Error(`不支持的操作：${action.type}`)
+  }
+}
+
+/** AI 连接测试：GET /models，返回人类可读结果。 */
+export async function aiTest(): Promise<string> {
+  if (!state.ai.base_url.trim()) return '✗ AI 接口地址未配置'
+  try {
+    const res = await gatewayRequest('/models', { method: 'GET' })
+    if (res.status === 401 || res.status === 403) return '✗ 网关可达，但密钥无效或未填写'
+    if (res.status < 200 || res.status >= 300) return '✗ 网关返回 HTTP ' + res.status
+    const models = (res.data as Record<string, unknown>)?.data
+    const count = Array.isArray(models) ? models.length : 0
+    return count ? '✓ 网关可达，' + count + ' 个模型可用' : '✓ 网关可达'
+  } catch (error) {
+    return '✗ ' + ((error as Error).message || '连接失败')
   }
 }

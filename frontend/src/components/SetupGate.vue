@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { initLocal, state, persistNow } from '../local/state'
+import { aiTest } from '../local/ai'
 import { providers, saveProviders, verifyProvider, pullFromCloud, type ProviderConfig, type CloudProviders } from '../local/sync'
 
 const emit = defineEmits<{ done: [] }>()
@@ -9,7 +10,7 @@ const emit = defineEmits<{ done: [] }>()
 // AI 网关：默认占位为示例地址；手机上 127.0.0.1 指手机自身，
 // 网关跑在电脑上时请填电脑的局域网 IP（如 http://192.168.3.100:31415/v1）
 const ai = reactive({
-  base_url: localStorage.getItem('myhouse.ai.baseUrl') || 'http://127.0.0.1:31415/v1',
+  base_url: localStorage.getItem('myhouse.ai.baseUrl') || 'http://192.168.3.100:31415/v1',
   model: localStorage.getItem('myhouse.ai.model') || 'auto',
   api_key: '',
 })
@@ -22,6 +23,16 @@ const slots = reactive<Record<SlotKey, { cfg: ProviderConfig; verifying: boolean
 const importing = ref(false)
 const importResult = ref('')
 const starting = ref(false)
+const aiTesting = ref(false)
+const aiTestResult = ref('')
+async function testAi() {
+  persistAll()
+  aiTesting.value = true
+  aiTestResult.value = ''
+  try {
+    aiTestResult.value = await aiTest()
+  } finally { aiTesting.value = false }
+}
 
 const anyVerified = computed(() => slots.github.ok || slots.gitee.ok)
 const bothOk = computed(() => slots.github.ok && slots.gitee.ok)
@@ -193,7 +204,15 @@ async function startOffline() {
               placeholder="由自己手动输入，不设默认"
           /></label>
         </div>
-        <p class="muted">对话走 /chat/completions。手机上 127.0.0.1 指手机自身，网关在电脑上时填电脑的局域网 IP。</p>
+        <div class="setup-actions">
+          <button class="outline-btn" type="button" :disabled="aiTesting" @click="testAi">
+            {{ aiTesting ? '测试中…' : '测试 AI 连接' }}
+          </button>
+        </div>
+        <p v-if="aiTestResult" class="setup-result" :class="{ ok: aiTestResult.startsWith('✓') }" role="status">
+          {{ aiTestResult }}
+        </p>
+        <p class="muted">对话走 /chat/completions。默认地址按你电脑上的网关预填（手机与电脑同网段）。</p>
       </section>
 
       <p v-if="importResult" class="setup-result" role="status">{{ importResult }}</p>

@@ -129,6 +129,17 @@ function toggleTtsCustom(event: Event) {
 function testSpeak() {
   void speak('朗读测试：这是我的家。').catch((error) => toast((error as Error).message))
 }
+const aiTesting = ref(false)
+const aiTestResult = ref('')
+async function testAi() {
+  await saveSettings()
+  aiTesting.value = true
+  aiTestResult.value = ''
+  try {
+    const { aiTest } = await import('../local/ai')
+    aiTestResult.value = await aiTest()
+  } finally { aiTesting.value = false }
+}
 </script>
 
 <template>
@@ -289,6 +300,10 @@ function testSpeak() {
         <div class="settings-actions">
           <button class="primary-btn">保存设置</button>
           <span v-if="settingsSaved">已保存</span>
+          <button class="outline-btn" :disabled="aiTesting" @click="testAi">
+            {{ aiTesting ? '测试中…' : '测试 AI 连接' }}
+          </button>
+          <span v-if="aiTestResult">{{ aiTestResult }}</span>
         </div>
       </form>
     </div>

@@ -52,7 +52,7 @@ export function freshState(): LocalState {
     version: 1, seq: 1000,
     members: [{ id: 1, name: '家', sort_order: 1 }],
     groups: [], containers: [], items: [], recipes: [], attachments: [], history: [],
-    ai: { base_url: '', model: 'auto', api_key: '' },
+    ai: { base_url: 'http://192.168.3.100:31415/v1', model: 'auto', api_key: '' },
   }
 }
 
