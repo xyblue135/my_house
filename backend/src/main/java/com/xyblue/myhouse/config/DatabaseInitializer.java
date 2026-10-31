@@ -41,7 +41,6 @@ public class DatabaseInitializer implements ApplicationRunner {
         createRecipesSchema();
         migrateRecipeAttachments();
         createFtsTriggers();
-        migrateSquareCovers();
 
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM containers", Integer.class);
         if (count != null && count == 0) seedFreshDatabase();
@@ -72,22 +71,6 @@ public class DatabaseInitializer implements ApplicationRunner {
         } catch (Exception ex) { return false; }
     }
 
-    /**
-     * 统一封面比例：把已存量的图片附件裁剪为 1:1 正方形（居中裁剪，不做识别）。
-     * 只跑一次；用户的图片文件会被原地重写，元数据不变，撤销引用仍然有效。
-     */
-    private void migrateSquareCovers() {
-        if (isMigrationApplied("2026-10-19-v1-square-covers")) return;
-        try {
-            int done = attachments.cropImagesToSquare();
-            if (done > 0) org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
-                .info("已把 {} 张封面图片裁剪为 1:1", done);
-        } catch (Exception ex) {
-            org.slf4j.LoggerFactory.getLogger(DatabaseInitializer.class)
-                .warn("封面裁剪迁移失败: {}", ex.getMessage());
-        }
-        jdbc.update("INSERT OR IGNORE INTO migrations(key) VALUES (?)", "2026-10-19-v1-square-covers");
-    }
 
     /**
      * FTS5 同步 trigger：items / containers / household_members 变更时自动维护 items_fts。

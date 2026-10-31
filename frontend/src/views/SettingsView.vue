@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import { api, getApiBase, setApiBase, setSessionToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
-import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { features, setFeature } from '../composables/useFeatureToggles'
-import type { AiSettings, Member, MqStatus } from '../types'
+import { searchScope, setSearchScope } from '../composables/useSearchScope'
+import type { AiSettings, MqStatus } from '../types'
 
 const store = useAppStore()
 const { toast } = useToast()
-const { refreshData } = useAppBootstrap()
 
 const apiKeyInput = ref('')
 const showApiKey = ref(false)
@@ -70,46 +69,20 @@ onMounted(async () => {
   await refreshMqStatus()
 })
 
-// ---- 房间管理 ----
-const newMemberName = ref('')
-async function addMember() {
-  const name = newMemberName.value.trim()
-  if (!name) {
-    toast('请输入房间名称')
-    return
-  }
-  try {
-    await api('/api/members', { method: 'POST', body: JSON.stringify({ name }) })
-    newMemberName.value = ''
-    await refreshData()
-    toast('已添加房间')
-  } catch (error) {
-    toast((error as Error).message)
-  }
-}
-async function renameMember(m: Member) {
-  const name = m.name.trim()
-  if (!name) {
-    toast('房间名称不能为空')
-    return
-  }
-  try {
-    await api(`/api/members/${m.id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
-    await refreshData()
-    toast('已改名')
-  } catch (error) {
-    toast((error as Error).message)
-  }
-}
-async function deleteMember(m: Member) {
-  if (!window.confirm(`删除房间「${m.name}」及其名下所有箱子、物品、记录？此操作不可恢复。`)) return
-  try {
-    await api(`/api/members/${m.id}`, { method: 'DELETE' })
-    await refreshData()
-    toast('已删除房间')
-  } catch (error) {
-    toast((error as Error).message)
-  }
+// ---- 查找范围 ----
+// 主搜索按分组过滤；房间概念已从界面下线，这里只保留 全部 / 未分组 / 各分组。
+const scope = searchScope
+const scopeOptions = computed(() => [
+  { value: 'all', label: '全部' },
+  { value: 'ungrouped', label: '未分组' },
+  ...store.groups.map((g) => ({ value: String(g.id), label: g.name })),
+])
+const currentScopeName = computed(
+  () => scopeOptions.value.find((o) => o.value === scope.value)?.label ?? '全部',
+)
+function changeScope(event: Event) {
+  setSearchScope((event.target as HTMLSelectElement).value)
+  toast('查找范围已更新：' + currentScopeName.value)
 }
 
 function toggleSpaceView(event: Event) {
@@ -126,40 +99,24 @@ function toggleCollision(event: Event) {
       <div>
         <p class="eyebrow">按家里的习惯来</p>
         <h1>设置</h1>
-        <p class="page-description">管理房间，也照顾好你的数据。</p>
+        <p class="page-description">查找范围与功能开关，也照顾好你的数据。</p>
       </div>
     </div>
     <div class="settings-card">
       <div class="settings-title">
-        <div class="settings-icon"><AppIcon name="home" /></div>
+        <div class="settings-icon"><AppIcon name="search" /></div>
         <div>
-          <h3>房间管理</h3>
-          <p>在物品页切换房间，查看各自的收纳。删除房间会删除其名下的全部数据。</p>
+          <h3>查找范围</h3>
+          <p>主搜索只在选定范围内找物品和箱子，默认全部，不用在查找时再点按钮。</p>
         </div>
       </div>
-      <div class="member-manage-list">
-        <div v-for="m in store.members" :key="m.id" class="member-manage-row">
-          <input v-model="m.name" :aria-label="'房间名称：' + m.id" @change="renameMember(m)" />
-          <button
-            class="outline-btn danger-outline"
-            :disabled="store.members.length <= 1"
-            @click="deleteMember(m)"
-          >
-            删除
-          </button>
-        </div>
-      </div>
-      <div class="member-manage-add">
-        <input
-          v-model="newMemberName"
-          aria-label="新房间名称"
-          placeholder="如：书房、储物间"
-          @keyup.enter="addMember"
-        />
-        <button class="primary-btn" @click="addMember">
-          <AppIcon name="plus" :size="17" />添加房间
-        </button>
-      </div>
+      <label class="settings-select-row"
+        >当前范围<select :value="scope" aria-label="查找范围" @change="changeScope">
+          <option v-for="option in scopeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select></label
+      >
     </div>
 
     <div class="settings-card">

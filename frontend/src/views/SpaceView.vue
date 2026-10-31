@@ -33,16 +33,14 @@ function round(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-const ownerContainers = computed(() =>
-  store.containers.filter((c) => c.owner_id === store.selectedOwnerId),
-)
+const allContainers = computed(() => store.containers)
 
 /** 从未摆放过：x/z 都还是初始 0。这类箱子由前端自动排到空闲位置，不落库。 */
 function isPlaced(c: Container): boolean {
   return num(c.pos_x, 0) !== 0 || num(c.pos_z, 0) !== 0
 }
-const unplaced = computed(() => ownerContainers.value.filter((c) => !isPlaced(c)))
-const placedCount = computed(() => ownerContainers.value.length - unplaced.value.length)
+const unplaced = computed(() => allContainers.value.filter((c) => !isPlaced(c)))
+const placedCount = computed(() => allContainers.value.length - unplaced.value.length)
 
 /** 未摆放箱子的自动排布：从角落按行铺开，尽量不重叠。 */
 const autoLayout = computed(() => {
@@ -96,7 +94,7 @@ function findCollision(box: { id: number; x: number; z: number; w: number; d: nu
 }
 
 const displayBoxes = computed<SpaceBox[]>(() =>
-  ownerContainers.value.map((c) => {
+  allContainers.value.map((c) => {
     const placed = isPlaced(c)
     const auto = autoLayout.value.get(c.id)
     return {
@@ -132,14 +130,13 @@ const searchError = ref('')
 const matchedContainers = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   if (!keyword) return [] as Container[]
-  return ownerContainers.value.filter((c) =>
+  return allContainers.value.filter((c) =>
     (c.name + ' ' + (c.notes || '')).toLocaleLowerCase().includes(keyword),
   )
 })
 const itemsByContainer = computed(() => {
   const map = new Map<number, Item[]>()
   for (const item of matchItems.value) {
-    if (item.owner_id !== store.selectedOwnerId) continue
     const list = map.get(item.container_id) ?? []
     list.push(item)
     map.set(item.container_id, list)
@@ -162,8 +159,7 @@ watch(query, (value, _, onCleanup) => {
   const controller = new AbortController()
   const timer = window.setTimeout(async () => {
     try {
-      const params = new URLSearchParams({ q: keyword, owner_id: String(store.selectedOwnerId) })
-      const result = await api<Item[]>('/api/items?' + params, { signal: controller.signal })
+      const result = await api<Item[]>('/api/items?q=' + encodeURIComponent(keyword), { signal: controller.signal })
       if (!controller.signal.aborted) matchItems.value = result
     } catch (error) {
       if (!controller.signal.aborted) searchError.value = (error as Error).message
@@ -301,12 +297,6 @@ async function arrangeUnplaced() {
   }
 }
 
-watch(() => store.selectedOwnerId, () => {
-  selectedId.value = null
-  hoveredId.value = null
-  query.value = ''
-})
-
 const showLabels = computed(() => displayBoxes.value.length <= 24)
 </script>
 
@@ -317,20 +307,9 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
         <p class="eyebrow">把收纳摆进房间</p>
         <h1>房间视图</h1>
         <p class="page-description">
-          {{ ownerContainers.length }} 个箱子，已摆放 {{ placedCount }} 个。1 格约 50 厘米。
+          {{ allContainers.length }} 个箱子，已摆放 {{ placedCount }} 个。1 格约 50 厘米。
         </p>
       </div>
-      <label class="member-select"
-        ><AppIcon name="space" :size="17" /><select
-          :value="store.selectedOwnerId"
-          aria-label="切换房间"
-          @change="store.setOwner(Number(($event.target as HTMLSelectElement).value))"
-        >
-          <option v-for="member in store.members" :key="member.id" :value="member.id">
-            {{ member.name }}
-          </option>
-        </select></label
-      >
     </div>
 
     <div class="space-layout">
@@ -428,7 +407,7 @@ const showLabels = computed(() => displayBoxes.value.length <= 24)
           </div>
         </details>
 
-        <p v-if="!ownerContainers.length" class="space-empty">
+        <p v-if="!allContainers.length" class="space-empty">
           还没有箱子。先在「物品」页添加箱子，再回来摆放它们。
         </p>
 

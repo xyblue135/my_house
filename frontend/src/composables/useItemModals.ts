@@ -80,7 +80,8 @@ function createItemModalsImpl(): ItemModals {
   const itemForm = reactive<ItemForm>({
     name: '', container_id: 0, quantity: '1',
   })
-  const filteredContainers = computed<Container[]>(() => store.containers.filter(c => c.owner_id === store.selectedOwnerId))
+  // 房间概念已从界面下线：物品表单里可以选择所有箱子
+  const filteredContainers = computed<Container[]>(() => store.containers)
   const containerModalOpen = ref(false)
   const containerEditingId = ref<number | null>(null)
   const containerForm = reactive({ name: '', notes: '', owner_id: 1, group_id: null as number | null })
@@ -367,7 +368,7 @@ function createItemModalsImpl(): ItemModals {
     openAddContainer(groupId: number | null = null) {
       containerEditingId.value = null
       containerForm.name = ''; containerForm.notes = ''
-      containerForm.owner_id = store.selectedOwnerId
+      containerForm.owner_id = store.members[0]?.id ?? 1
       containerForm.group_id = groupId ?? null
       containerAttachments.value = []
       revokeUrls(containerPreviews.value)

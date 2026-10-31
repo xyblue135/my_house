@@ -114,55 +114,6 @@ public class AttachmentService {
      * 只处理 jpg/jpeg/png；其它格式（webp/gif 等）跳过以免损坏文件。原地覆盖，
      * 不改动 attachments 元数据，因此撤销历史里的引用仍然有效。
      */
-    public int cropImagesToSquare() {
-        List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT id, stored_name, mime_type FROM attachments WHERE kind='image'");
-        int done = 0;
-        for (Map<String, Object> row : rows) {
-            String storedName = String.valueOf(row.get("stored_name"));
-            Path path = root.resolve(storedName).normalize();
-            if (!path.startsWith(root) || !Files.exists(path)) continue;
-            String format = squareFormat(storedName);
-            if (format == null) continue;
-            try {
-                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(path.toFile());
-                if (img == null) continue;
-                int w = img.getWidth();
-                int h = img.getHeight();
-                if (w <= 0 || h <= 0 || w == h) continue;
-                int side = Math.min(w, h);
-                int sx = (w - side) / 2;
-                int sy = (h - side) / 2;
-                int type = format.equals("png")
-                    ? java.awt.image.BufferedImage.TYPE_INT_ARGB
-                    : java.awt.image.BufferedImage.TYPE_INT_RGB;
-                java.awt.image.BufferedImage square = new java.awt.image.BufferedImage(side, side, type);
-                java.awt.Graphics2D g = square.createGraphics();
-                g.drawImage(img, 0, 0, side, side, sx, sy, sx + side, sy + side, null);
-                g.dispose();
-                Path tmp = path.resolveSibling(path.getFileName() + ".crop.tmp");
-                if (!javax.imageio.ImageIO.write(square, format, tmp.toFile())) {
-                    Files.deleteIfExists(tmp);
-                    continue;
-                }
-                Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING);
-                jdbc.update("UPDATE attachments SET size_bytes=? WHERE id=?", Files.size(path), row.get("id"));
-                done++;
-            } catch (Exception ex) {
-                org.slf4j.LoggerFactory.getLogger(AttachmentService.class)
-                    .warn("裁剪封面失败 {}: {}", storedName, ex.getMessage());
-            }
-        }
-        return done;
-    }
-
-    /** 可安全原地重写的图片格式；其它返回 null 表示跳过。 */
-    private static String squareFormat(String storedName) {
-        String name = storedName.toLowerCase();
-        if (name.endsWith(".png")) return "png";
-        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "jpg";
-        return null;
-    }
 
     /**
      * 启动时清理孤儿附件文件：磁盘上有但 DB 已无对应记录。

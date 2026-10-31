@@ -4,6 +4,7 @@ import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
+import { containerInScope, scopeLabel } from '../composables/useSearchScope'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
 import AiAssistantPanel from '../components/AiAssistantPanel.vue'
@@ -19,11 +20,9 @@ const activeGroupId = ref<number | 'all' | 'ungrouped'>('all')
 const query = ref('')
 const aiEnabled = ref(false)
 const aiBusy = ref(false)
-const searchOwnerIds = ref<number[]>([])
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
-const scopeLabel = computed(() => searchOwnerIds.value.length
-  ? store.members.filter(member => searchOwnerIds.value.includes(member.id)).map(member => member.name).join('、')
-  : '全部房间')
+// 房间概念已下线：AI 始终在全库范围查找
+const allOwnerIds = computed(() => store.members.map((member) => member.id))
 const searchResults = ref<Item[]>([])
 const searching = ref(false)
 const searchError = ref('')
@@ -35,13 +34,12 @@ const sortList = ref<Container[]>([])
 const dragIndex = ref<number | null>(null)
 const savingSort = ref(false)
 
-const ownerContainers = computed(() =>
-  store.containers.filter((c) => c.owner_id === store.selectedOwnerId),
-)
-const myGroups = computed(() => store.groups.filter((g) => g.owner_id === store.selectedOwnerId))
-const totalItems = computed(() => ownerContainers.value.reduce((sum, c) => sum + c.item_count, 0))
+const allContainers = computed(() => store.containers)
+const myGroups = computed(() => store.groups)
+const ungroupedCount = computed(() => allContainers.value.filter((c) => c.group_id == null).length)
+const totalItems = computed(() => allContainers.value.reduce((sum, c) => sum + c.item_count, 0))
 const filteredContainers = computed(() =>
-  ownerContainers.value.filter(
+  allContainers.value.filter(
     (c) =>
       activeGroupId.value === 'all' ||
       (activeGroupId.value === 'ungrouped'
@@ -52,27 +50,28 @@ const filteredContainers = computed(() =>
 const displayContainers = computed(() =>
   editingSort.value ? sortList.value : filteredContainers.value,
 )
+const currentScopeLabel = computed(() => scopeLabel(myGroups.value))
 const matchingContainers = computed(() =>
-  store.containers.filter((c) =>
-    (!searchOwnerIds.value.length || searchOwnerIds.value.includes(c.owner_id)) &&
-    (c.name + ' ' + (c.notes || ''))
-      .toLocaleLowerCase()
-      .includes(query.value.trim().toLocaleLowerCase()),
+  store.containers.filter(
+    (c) =>
+      containerInScope(c) &&
+      (c.name + ' ' + (c.notes || ''))
+        .toLocaleLowerCase()
+        .includes(query.value.trim().toLocaleLowerCase()),
   ),
 )
-const activeGroup = computed(() => myGroups.value.find((g) => g.id === activeGroupId.value))
-watch(
-  () => store.selectedOwnerId,
-  () => {
-    activeGroupId.value = 'all'
-    cancelSort()
-  },
+const scopedResults = computed(() =>
+  searchResults.value.filter((item) => {
+    const container = store.containers.find((c) => c.id === item.container_id)
+    return !container || containerInScope(container)
+  }),
 )
+const activeGroup = computed(() => myGroups.value.find((g) => g.id === activeGroupId.value))
 watch(activeGroupId, cancelSort)
 watch(query, cancelSort)
 
 // Query the server, so search also finds items beyond the initial inventory page.
-watch([query, searchOwnerIds, aiEnabled, () => store.items], ([value], _, onCleanup) => {
+watch([query, aiEnabled, () => store.items], ([value], _, onCleanup) => {
   const keyword = value.trim()
   searchResults.value = []
   searchError.value = ''
@@ -81,10 +80,8 @@ watch([query, searchOwnerIds, aiEnabled, () => store.items], ([value], _, onClea
   const controller = new AbortController()
   const timer = window.setTimeout(async () => {
     try {
-      const params = new URLSearchParams({ q: keyword })
-      searchOwnerIds.value.forEach(id => params.append('owner_id', String(id)))
       const result = await api<Item[]>(
-        '/api/items?' + params,
+        '/api/items?q=' + encodeURIComponent(keyword),
         { signal: controller.signal },
       )
       if (!controller.signal.aborted) searchResults.value = result
@@ -100,11 +97,6 @@ watch([query, searchOwnerIds, aiEnabled, () => store.items], ([value], _, onClea
   })
 })
 
-function toggleSearchOwner(id: number) {
-  searchOwnerIds.value = searchOwnerIds.value.includes(id)
-    ? searchOwnerIds.value.filter(value => value !== id)
-    : [...searchOwnerIds.value, id]
-}
 function submitSearch(event?: Event) {
   if (event instanceof KeyboardEvent && event.isComposing) return
   if (aiEnabled.value && !aiBusy.value) void aiPanel.value?.sendChat(query.value)
@@ -114,19 +106,16 @@ function useSuggestion(text: string) {
   submitSearch()
 }
 
-function selectOwner(event: Event) {
-  store.setOwner(Number((event.target as HTMLSelectElement).value))
-}
 function openAddContainer() {
   modals.openAddContainer(typeof activeGroupId.value === 'number' ? activeGroupId.value : null)
 }
 function openAddItem() {
-  if (!ownerContainers.value.length) {
+  if (!allContainers.value.length) {
     openAddContainer()
     toast('先创建一个箱子，再放入物品')
     return
   }
-  modals.openAddItem(ownerContainers.value[0].id)
+  modals.openAddItem(allContainers.value[0].id)
 }
 async function addGroup() {
   const name = groupName.value.trim()
@@ -135,7 +124,7 @@ async function addGroup() {
   try {
     await api('/api/groups', {
       method: 'POST',
-      body: JSON.stringify({ owner_id: store.selectedOwnerId, name }),
+      body: JSON.stringify({ owner_id: store.members[0]?.id ?? 1, name }),
     })
     await refreshData()
     groupName.value = ''
@@ -199,13 +188,23 @@ async function saveSort() {
     // Keep boxes outside the selected group in their original positions.
     const reordered = [...sortList.value]
     const selectedIds = new Set(reordered.map((c) => c.id))
-    const ids = ownerContainers.value.map((c) =>
+    const ids = allContainers.value.map((c) =>
       selectedIds.has(c.id) ? reordered.shift()!.id : c.id,
     )
-    await api('/api/containers/reorder', {
-      method: 'POST',
-      body: JSON.stringify({ owner_id: store.selectedOwnerId, ids }),
-    })
+    // 房间概念已从界面下线；按 owner 分别提交排序，兼容历史数据
+    const byOwner = new Map<number, number[]>()
+    for (const id of ids) {
+      const owner = store.containers.find((c) => c.id === id)?.owner_id ?? 1
+      const list = byOwner.get(owner) ?? []
+      list.push(id)
+      byOwner.set(owner, list)
+    }
+    for (const [ownerId, ownerIds] of byOwner) {
+      await api('/api/containers/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ owner_id: ownerId, ids: ownerIds }),
+      })
+    }
     cancelSort()
     await refreshData()
     toast('顺序已保存')
@@ -231,20 +230,9 @@ onBeforeUnmount(() => {
         <p class="eyebrow">收好每一份日常</p>
         <h1>家里的物品</h1>
         <p class="page-description">
-          {{ ownerContainers.length }} 个箱子，{{ totalItems }} 种物品，都有迹可寻。
+          {{ allContainers.length }} 个箱子，{{ totalItems }} 种物品，都有迹可寻。
         </p>
       </div>
-      <label class="member-select"
-        ><AppIcon name="space" :size="17" /><select
-          :value="store.selectedOwnerId"
-          aria-label="查看房间"
-          @change="selectOwner"
-        >
-          <option v-for="member in store.members" :key="member.id" :value="member.id">
-            {{ member.name }}
-          </option>
-        </select></label
-      >
     </div>
 
     <div class="inventory-tools">
@@ -280,27 +268,20 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="search-scope" role="group" aria-label="查找与操作范围">
-      <span>查找 / 操作范围</span>
-      <div class="scope-buttons">
-        <button :class="{ active: !searchOwnerIds.length }" :aria-pressed="!searchOwnerIds.length" :disabled="aiBusy" @click="searchOwnerIds = []">全部</button>
-        <button v-for="member in store.members" :key="member.id" :class="{ active: searchOwnerIds.includes(member.id) }" :aria-pressed="searchOwnerIds.includes(member.id)" :disabled="aiBusy" @click="toggleSearchOwner(member.id)">{{ member.name }}</button>
-      </div>
-    </div>
-    <AiAssistantPanel v-if="aiEnabled" ref="aiPanel" :owner-ids="searchOwnerIds" :scope-label="scopeLabel" @busy="aiBusy = $event" @suggestion="useSuggestion" />
+    <AiAssistantPanel v-if="aiEnabled" ref="aiPanel" :owner-ids="allOwnerIds" scope-label="全部" @busy="aiBusy = $event" @suggestion="useSuggestion" />
 
     <template v-if="query.trim() && !aiEnabled">
       <div class="section-head">
         <div>
           <h2>搜索结果</h2>
-          <p>范围：{{ scopeLabel }} 的物品和箱子</p>
+          <p>范围：{{ currentScopeLabel }} 的物品和箱子（范围在设置里调整）</p>
         </div>
       </div>
       <p v-if="searching" class="inline-notice" role="status">正在查找…</p>
       <p v-else-if="searchError" class="inline-notice error" role="alert">{{ searchError }}</p>
-      <div v-else-if="searchResults.length" class="search-results">
+      <div v-else-if="scopedResults.length" class="search-results">
         <button
-          v-for="item in searchResults"
+          v-for="item in scopedResults"
           :key="item.id"
           class="search-result"
           @click="modals.openEditItem(item)"
@@ -315,13 +296,13 @@ onBeforeUnmount(() => {
           <span class="result-copy"
             ><strong>{{ item.name }}</strong
             ><span
-              >{{ item.owner_name }} · {{ item.container_name
+              >{{ item.container_name
               }}<template v-if="item.quantity != null"> · {{ item.quantity }} 个</template></span
             ></span
           >
           <AppIcon name="right" :size="18" />
         </button>
-        <p v-if="searchResults.length >= 200" class="muted">
+        <p v-if="scopedResults.length >= 200" class="muted">
           结果较多，请输入更具体的名称缩小范围。
         </p>
       </div>
@@ -335,52 +316,56 @@ onBeforeUnmount(() => {
         >
           <AppIcon name="folder" /><span class="result-copy"
             ><strong>{{ container.name }}</strong
-            ><span>{{ container.owner_name }} · {{ container.item_count }} 种物品</span></span
+            ><span>{{ container.group_name || '未分组' }} · {{ container.item_count }} 种物品</span></span
           ><AppIcon name="right" :size="18" />
         </button>
       </div>
       <div
-        v-if="!searching && !searchError && !searchResults.length && !matchingContainers.length"
+        v-if="!searching && !searchError && !scopedResults.length && !matchingContainers.length"
         class="empty"
       >
         <AppIcon name="search" :size="36" />
         <h3>还没找到这件东西</h3>
-        <p>试试更短的名称，或切换其他房间。</p>
+        <p>试试更短的名称，或到设置里把查找范围改回「全部」。</p>
         <button class="outline-btn" @click="query = ''">返回所有箱子</button>
       </div>
     </template>
 
     <template v-else>
       <div class="group-tabs" aria-label="按分组筛选">
-        <button
-          class="group-tab"
-          :class="{ active: activeGroupId === 'all' }"
-          :aria-pressed="activeGroupId === 'all'"
-          @click="activeGroupId = 'all'"
-        >
-          全部<span>{{ ownerContainers.length }}</span>
-        </button>
-        <button
-          class="group-tab"
-          :class="{ active: activeGroupId === 'ungrouped' }"
-          :aria-pressed="activeGroupId === 'ungrouped'"
-          @click="activeGroupId = 'ungrouped'"
-        >
-          未分组
-        </button>
-        <button
-          v-for="group in myGroups"
-          :key="group.id"
-          class="group-tab"
-          :class="{ active: activeGroupId === group.id }"
-          :aria-pressed="activeGroupId === group.id"
-          @click="activeGroupId = group.id"
-        >
-          {{ group.name }}
-        </button>
-        <button class="group-add" @click="groupModal = true">
-          <AppIcon name="plus" :size="16" />分组
-        </button>
+        <div class="group-tabs-special">
+          <button
+            class="group-tab special"
+            :class="{ active: activeGroupId === 'all' }"
+            :aria-pressed="activeGroupId === 'all'"
+            @click="activeGroupId = 'all'"
+          >
+            <AppIcon name="grid" :size="15" />全部<span>{{ allContainers.length }}</span>
+          </button>
+          <button
+            class="group-tab special"
+            :class="{ active: activeGroupId === 'ungrouped' }"
+            :aria-pressed="activeGroupId === 'ungrouped'"
+            @click="activeGroupId = 'ungrouped'"
+          >
+            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
+          </button>
+        </div>
+        <div class="group-tabs-groups">
+          <button
+            v-for="group in myGroups"
+            :key="group.id"
+            class="group-tab"
+            :class="{ active: activeGroupId === group.id }"
+            :aria-pressed="activeGroupId === group.id"
+            @click="activeGroupId = group.id"
+          >
+            {{ group.name }}
+          </button>
+          <button class="group-add" @click="groupModal = true">
+            <AppIcon name="plus" :size="16" />分组
+          </button>
+        </div>
       </div>
       <div class="section-head inventory-section-head">
         <div>
@@ -410,7 +395,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>
-      <div v-if="displayContainers.length" class="containers-grid">
+      <div v-if="displayContainers.length" class="container-rows">
         <article
           v-for="(container, index) in displayContainers"
           :key="container.id"
