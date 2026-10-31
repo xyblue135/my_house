@@ -13,7 +13,7 @@
 
     <groupId>com.xyblue</groupId>
     <artifactId>myhouse</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <name>My House</name>
     <description>My House local-first inventory hub</description>
 
@@ -47,6 +47,7 @@
     </dependencies>
 
     <build>
+        <finalName>myhouse</finalName>
         <resources>
             <resource>
                 <directory>src/main/resources</directory>

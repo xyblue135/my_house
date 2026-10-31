@@ -29,7 +29,7 @@ cd ../backend
 .\mvnw.cmd clean package
 ```
 
-整合 JAR：`backend/target/myhouse-1.0.0.jar`，其中包含构建后的网页。
+整合 JAR：`backend/target/myhouse.jar`，其中包含构建后的网页。
 
 | 入口 | 用途 |
 | --- | --- |

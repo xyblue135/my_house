@@ -6,7 +6,7 @@
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$jarPath = Join-Path $repoRoot 'backend\target\myhouse-1.0.0.jar'
+$jarPath = Join-Path $repoRoot 'backend\target\myhouse.jar'
 $buildStampPath = Join-Path $repoRoot 'backend\target\source-hash.txt'
 $children = @()
 
@@ -60,7 +60,7 @@ function Stop-RunningJarInstances {
     # 避免 clean 删除 jar 时报「另一个程序正在使用此文件」。只按 jar 名匹配，不动其它 Java 进程。
     # @() must wrap the whole pipeline: an empty result then yields an empty array, not @($null).
     $stale = @(Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match 'myhouse-1\.0\.0\.jar|itemnest-1\.0\.0\.jar' })
+        Where-Object { $_.CommandLine -match 'myhouse-[0-9][0-9.]*\.jar|itemnest-[0-9][0-9.]*\.jar|myhouse\.jar' })
     foreach ($process in $stale) {
         if ($null -eq $process) { continue }
         Write-Host "[My House] Stopping running JAR instance (pid $($process.ProcessId)) before rebuild."
