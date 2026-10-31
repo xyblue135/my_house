@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('start', 'build', 'rebuild', 'dev', 'lan', 'worker', 'help')]
     [string]$Mode = 'start',
     [switch]$NoBrowser
