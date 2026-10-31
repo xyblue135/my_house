@@ -58,13 +58,15 @@ function Invoke-Frontend([string[]]$CommandArgs) {
 function Stop-RunningJarInstances {
     # Windows 会锁定正在运行的 JAR 文件；重建或重启前先停掉本仓库启动的 Java 实例，
     # 避免 clean 删除 jar 时报「另一个程序正在使用此文件」。只按 jar 名匹配，不动其它 Java 进程。
-    $stale = Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match 'myhouse-1\.0\.0\.jar|itemnest-1\.0\.0\.jar' }
-    foreach ($process in @($stale)) {
+    # @() must wrap the whole pipeline: an empty result then yields an empty array, not @($null).
+    $stale = @(Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'myhouse-1\.0\.0\.jar|itemnest-1\.0\.0\.jar' })
+    foreach ($process in $stale) {
+        if ($null -eq $process) { continue }
         Write-Host "[My House] Stopping running JAR instance (pid $($process.ProcessId)) before rebuild."
         Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    if (@($stale).Count -gt 0) { Start-Sleep -Milliseconds 800 }
+    if ($stale.Count -gt 0) { Start-Sleep -Milliseconds 800 }
 }
 
 function Invoke-BackendBuild([switch]$SkipTests) {
