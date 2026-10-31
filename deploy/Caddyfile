@@ -5,5 +5,5 @@ items.example.com {
         Referrer-Policy no-referrer
         X-Content-Type-Options nosniff
     }
-    reverse_proxy 127.0.0.1:8765
+    reverse_proxy 127.0.0.1:10100
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
-import { api, getApiBase, getLanToken, setApiBase, setLanToken } from '../api'
+import { api, getApiBase, setApiBase, setSessionToken } from '../api'
 import { useAppStore } from '../store'
 import { useToast } from '../composables/useToast'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
@@ -16,7 +16,6 @@ const apiKeyInput = ref('')
 const showApiKey = ref(false)
 const settingsSaved = ref(false)
 const backendUrlInput = ref(getApiBase())
-const lanTokenInput = ref(getLanToken() || '')
 
 async function saveSettings() {
   const payload: Record<string, string> = {
@@ -49,8 +48,8 @@ function saveBackendUrl() {
   }
 }
 
-function saveLanToken() {
-  setLanToken(lanTokenInput.value || null)
+function logout() {
+  setSessionToken(null)
   location.reload()
 }
 
@@ -218,17 +217,14 @@ function toggleCollision(event: Event) {
 
       <div class="settings-card">
         <div class="settings-title">
-          <div class="settings-icon"><AppIcon name="key" /></div>
+          <div class="settings-icon"><AppIcon name="shield" /></div>
           <div>
-            <h3>家庭访问密钥</h3>
-            <p>使用家人提供的访问密钥连接服务器。修改后将重新验证连接。</p>
+            <h3>退出登录</h3>
+            <p>清除本机的登录状态，下次打开需要重新输入家庭账号和密码。</p>
           </div>
         </div>
-        <form class="settings-form" @submit.prevent="saveLanToken">
-          <label
-            >访问密钥<input v-model="lanTokenInput" type="password" autocomplete="current-password"
-          /></label>
-          <div class="settings-actions"><button class="primary-btn">保存并重连</button></div>
+        <form class="settings-form" @submit.prevent="logout">
+          <div class="settings-actions"><button class="primary-btn">退出登录</button></div>
         </form>
       </div>
 

@@ -10,7 +10,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
@@ -18,40 +17,28 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.cors.CorsUtils;
 
+import com.xyblue.myhouse.service.SessionTokenStore;
+
 /**
- * 家庭共享密钥鉴权：配置后所有 API 请求都需要认证，包括本机反向代理。
+ * 会话令牌鉴权：所有 API 请求都需要登录后下发的凭证（浏览器/客户端在登录后自动携带）。
  * 客户端必须通过以下任一方式提供 token：
  *   1) Authorization: Bearer <token>
  *   2) X-Myhouse-Token: <token>
- *   3) URL 查询参数 ?token=<token>（仅附件内容 GET/HEAD）
+ *   3) URL 查询参数 ?token=<token>（仅附件内容 GET/HEAD，供 <img> 标签使用）
  *
- * 静态资源放行。未配置密钥只允许本机监听；公网部署必须配置密钥和 HTTPS。
+ * 登录端点 /api/auth/login 免鉴权（用账号密码换取 token）。
+ * 静态资源放行。令牌由 SessionTokenStore 在首次启动时自动生成，无需人工配置。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class LanAuthFilter extends OncePerRequestFilter {
 
-    private static final Set<String> LOOPBACK = Set.of("127.0.0.1", "localhost", "::1", "[::1]", "0:0:0:0:0:0:0:1");
     private static final Set<String> PROTECTED_PREFIXES = Set.of("/api/");
 
-    private final String lanToken;
-    private final String bindAddress;
+    private final SessionTokenStore sessionToken;
 
-    public LanAuthFilter(@Value("${myhouse.lan-token:#{null}}") String configured,
-                          @Value("${server.address:127.0.0.1}") String bind,
-                          @Value("${myhouse.require-auth:false}") boolean requireAuth) {
-        this.lanToken = configured == null || configured.isBlank() ? null : configured.trim();
-        this.bindAddress = bind == null ? "127.0.0.1" : bind.trim();
-        if (lanToken == null && (requireAuth || !LOOPBACK.contains(this.bindAddress))) {
-            throw new IllegalStateException("公开监听需要设置 MYHOUSE_ACCESS_TOKEN（至少 32 位随机字符）");
-        }
-        if (lanToken != null && lanToken.length() < 32) {
-            throw new IllegalStateException("MYHOUSE_ACCESS_TOKEN / MYHOUSE_LAN_TOKEN 至少需要 32 位随机字符");
-        }
-    }
-
-    private boolean authRequired() {
-        return lanToken != null;
+    public LanAuthFilter(SessionTokenStore sessionToken) {
+        this.sessionToken = sessionToken;
     }
 
     @Override
@@ -63,7 +50,7 @@ public class LanAuthFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        // 登录端点免鉴权：它用家庭账号密码换取访问密钥（账号错误时控制器内部返回 401 并带延迟）。
+        // 登录端点免鉴权：它用家庭账号密码换取会话令牌（账号错误时控制器内部返回 401 并带延迟）。
         if ("/api/auth/login".equals(path)) {
             chain.doFilter(request, response);
             return;
@@ -73,13 +60,13 @@ public class LanAuthFilter extends OncePerRequestFilter {
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("X-Content-Type-Options", "nosniff");
         // Preflight has header names, not credentials. MVC still validates origin/headers.
-        if (!authRequired() || CorsUtils.isPreFlightRequest(request)) {
+        if (CorsUtils.isPreFlightRequest(request)) {
             chain.doFilter(request, response);
             return;
         }
 
         String provided = extractToken(request, path);
-        if (provided != null && constantTimeEquals(provided, lanToken)) {
+        if (provided != null && constantTimeEquals(provided, sessionToken.token())) {
             chain.doFilter(request, response);
             return;
         }
@@ -87,8 +74,8 @@ public class LanAuthFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        // 不在 401 响应里回显 lanToken，避免被浏览器缓存泄漏
-        response.getWriter().write("{\"error\":\"unauthorized\",\"message\":\"请填写有效的家庭访问密钥\"}");
+        // 不在 401 响应里回显 token，避免被浏览器缓存泄漏
+        response.getWriter().write("{\"error\":\"unauthorized\",\"message\":\"请先使用家庭账号登录\"}");
     }
 
     private String extractToken(HttpServletRequest request, String path) {

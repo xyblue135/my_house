@@ -25,14 +25,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
     "myhouse.data-dir=target/test-data-auth", "myhouse.rabbitmq.enabled=false",
-    "myhouse.lan-token=test-only-0123456789abcdef0123456789abcdef", "server.address=127.0.0.1"
+    "server.address=127.0.0.1"
 })
 @AutoConfigureMockMvc
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class AuthLoginTests {
-    private static final String TOKEN = "test-only-0123456789abcdef0123456789abcdef";
-    private static final Path ACCOUNT = Path.of("target/test-data-auth/account.json");
     @Autowired MockMvc mvc;
+    @Autowired com.xyblue.myhouse.service.SessionTokenStore sessionToken;
+    private static final Path ACCOUNT = Path.of("target/test-data-auth/account.json");
 
     private static void writeAccount(String username, String password) throws Exception {
         byte[] salt = HexFormat.of().parseHex("00112233445566778899aabbccddeeff");
@@ -69,26 +69,20 @@ class AuthLoginTests {
 
     @Test
     @Order(3)
-    void correctCredentialsReturnAccessToken() throws Exception {
+    void correctCredentialsReturnSessionToken() throws Exception {
         mvc.perform(post("/api/auth/login")
                 .contentType("application/json")
                 .content("{\"username\":\"xyblue\",\"password\":\"right-password\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.token").value(TOKEN))
+            .andExpect(jsonPath("$.token").value(sessionToken.token()))
             .andExpect(jsonPath("$.username").value("xyblue"));
     }
 
     @Test
     @Order(4)
     void issuedTokenAuthenticatesRegularApiCalls() throws Exception {
-        String token = com.jayway.jsonpath.JsonPath.read(
-            mvc.perform(post("/api/auth/login")
-                    .contentType("application/json")
-                    .content("{\"username\":\"xyblue\",\"password\":\"right-password\"}"))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(),
-            "$.token");
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                .get("/api/connection").header("Authorization", "Bearer " + token))
+                .get("/api/connection").header("Authorization", "Bearer " + sessionToken.token()))
             .andExpect(status().isOk());
     }
 }

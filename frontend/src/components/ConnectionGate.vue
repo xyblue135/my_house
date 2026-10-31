@@ -2,15 +2,15 @@
 import { computed, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { Capacitor } from '@capacitor/core'
-import { api, connection, getApiBase, getLanToken, setApiBase, setLanToken } from '../api'
+import { api, connection, getApiBase, setApiBase, setSessionToken } from '../api'
 
 const props = defineProps<{ busy: boolean }>()
 const emit = defineEmits<{ reconnect: [] }>()
 const address = ref(getApiBase())
-const token = ref(getLanToken() || '')
 const username = ref('')
 const password = ref('')
-const mode = ref<'account' | 'token'>('account')
+// 原生 App 首次使用必须填服务地址，默认展开连接设置；网页同源连接可折叠。
+const showSettings = ref(Capacitor.isNativePlatform())
 const loggingIn = ref(false)
 const error = ref('')
 const native = Capacitor.isNativePlatform()
@@ -32,106 +32,82 @@ async function login() {
       body: JSON.stringify({ username: username.value.trim(), password: password.value }),
       allowUnconnected: true,
     })
-    setLanToken(result.token)
-    location.reload()
+    setSessionToken(result.token)
+    // 令牌就绪后直接重连，避免整页刷新；连接失败时门会继续显示最新状态
+    emit('reconnect')
   } catch (e) {
     error.value = (e as Error).message
   } finally {
     loggingIn.value = false
   }
 }
-
-function connect() {
-  error.value = ''
-  try {
-    const changed =
-      address.value.trim().replace(/\/$/, '') !== getApiBase() ||
-      token.value.trim() !== (getLanToken() || '')
-    setApiBase(address.value)
-    setLanToken(token.value)
-    if (changed) location.reload()
-    else emit('reconnect')
-  } catch (e) {
-    error.value = (e as Error).message
-  }
-}
-
-function submit() {
-  if (mode.value === 'account') void login()
-  else connect()
-}
 </script>
 
 <template>
   <div class="connection-gate" role="dialog" aria-modal="true" aria-labelledby="connection-title">
     <section class="connection-card">
-      <div class="brand-mark"><AppIcon name="box" :size="27" /></div>
+      <div class="connection-head">
+        <div class="brand-mark"><AppIcon name="box" :size="27" /></div>
+        <button
+          class="gate-gear"
+          type="button"
+          :aria-expanded="showSettings"
+          aria-label="连接设置"
+          :title="showSettings ? '收起连接设置' : '连接设置'"
+          @click="showSettings = !showSettings"
+        >
+          <AppIcon name="settings" :size="19" />
+        </button>
+      </div>
       <p class="connection-brand">我的家 · My House</p>
       <h1 id="connection-title">{{ title }}</h1>
       <p role="status">{{ connection.message || '连接成功后即可使用我的家。' }}</p>
       <p class="muted">物品和照片统一保存在服务器。连接后，就能和家人一起查找与整理。</p>
-      <form @submit.prevent="submit">
+      <form @submit.prevent="login">
         <label
-          >服务地址
+          >账号
           <input
-            v-model="address"
+            v-model="username"
             type="text"
-            inputmode="url"
-            :required="native"
-            :disabled="busy || loggingIn"
-            placeholder="https://items.example.com"
-            autocomplete="url"
+            :disabled="loggingIn || busy"
+            autocomplete="username"
             autocapitalize="off"
             spellcheck="false"
+            placeholder="家庭账号"
           />
         </label>
-        <p v-if="!native" class="muted">使用当前网站的服务器时，地址可以留空。</p>
-        <template v-if="mode === 'account'">
+        <label
+          >密码
+          <input
+            v-model="password"
+            type="password"
+            :disabled="loggingIn || busy"
+            autocomplete="current-password"
+            placeholder="家庭密码"
+          />
+        </label>
+        <div v-if="showSettings" class="gate-settings">
           <label
-            >账号
+            >服务地址
             <input
-              v-model="username"
+              v-model="address"
               type="text"
-              :disabled="busy || loggingIn"
-              autocomplete="username"
+              inputmode="url"
+              :required="native"
+              :disabled="loggingIn || busy"
+              placeholder="https://items.example.com"
+              autocomplete="url"
               autocapitalize="off"
               spellcheck="false"
-              placeholder="家庭账号"
             />
           </label>
-          <label
-            >密码
-            <input
-              v-model="password"
-              type="password"
-              :disabled="busy || loggingIn"
-              autocomplete="current-password"
-              placeholder="家庭密码"
-            />
-          </label>
-        </template>
-        <template v-else>
-          <label
-            >家庭访问密钥
-            <input
-              v-model="token"
-              type="password"
-              :disabled="busy"
-              autocomplete="current-password"
-              placeholder="填写家人提供的访问密钥"
-            />
-          </label>
-        </template>
+          <p v-if="!native" class="muted">使用当前网站的服务器时，地址可以留空。</p>
+        </div>
         <p v-if="error" role="alert" class="connection-error">{{ error }}</p>
-        <button class="primary-btn" :disabled="busy || loggingIn">
-          {{ loggingIn ? '登录中…' : busy ? '连接中…' : mode === 'account' ? '登录' : '连接' }}
+        <button class="primary-btn" :disabled="loggingIn || busy">
+          {{ loggingIn || busy ? '登录中…' : '登录' }}
         </button>
       </form>
-      <p class="muted mode-switch">
-        <a href="#" @click.prevent="mode = mode === 'account' ? 'token' : 'account'">
-          {{ mode === 'account' ? '使用家庭访问密钥连接' : '使用账号密码登录' }}
-        </a>
-      </p>
     </section>
   </div>
 </template>
@@ -155,6 +131,33 @@ function submit() {
   border-radius: 20px;
   padding: 28px;
   box-shadow: 0 12px 40px #1018280a;
+}
+.connection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gate-gear {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #475467;
+  cursor: pointer;
+}
+.gate-gear[aria-expanded='true'] {
+  background: #eef2f6;
+}
+.gate-settings {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 12px;
+  background: #f9fafb;
 }
 h1 {
   font-size: 24px;
@@ -199,13 +202,6 @@ button {
 .connection-error {
   color: #b42318;
   margin: 0;
-}
-.mode-switch {
-  margin-top: 16px;
-  text-align: center;
-}
-.mode-switch a {
-  color: #475467;
 }
 button:disabled {
   opacity: 0.6;

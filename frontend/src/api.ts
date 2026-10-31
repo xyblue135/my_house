@@ -9,8 +9,13 @@ export const connection = reactive({
 
 const buildApiBase = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 let runtimeApiBase = localStorage.getItem('myhouse.apiBase')?.replace(/\/$/, '') ?? buildApiBase
-// 局域网 token：和后端 LanAuthFilter 配套；只在用户主动设置后保存。
-let runtimeLanToken: string | null = localStorage.getItem('myhouse.lanToken') || null
+// 会话令牌：登录成功后由服务端下发（见 /api/auth/login），持久保存用于 API 与附件请求。
+// 旧版本的 myhouse.lanToken 键在这里一次性迁移。
+const LEGACY_TOKEN_KEY = 'myhouse.lanToken'
+let runtimeSessionToken: string | null =
+  localStorage.getItem('myhouse.sessionToken') || localStorage.getItem(LEGACY_TOKEN_KEY) || null
+if (runtimeSessionToken) localStorage.setItem('myhouse.sessionToken', runtimeSessionToken)
+localStorage.removeItem(LEGACY_TOKEN_KEY)
 
 export function apiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`
@@ -28,22 +33,22 @@ export function setApiBase(value: string): void {
   else localStorage.removeItem('myhouse.apiBase')
 }
 
-export function getLanToken(): string | null { return runtimeLanToken }
-export function setLanToken(value: string | null): void {
-  runtimeLanToken = value && value.trim() ? value.trim() : null
-  if (runtimeLanToken) localStorage.setItem('myhouse.lanToken', runtimeLanToken)
-  else localStorage.removeItem('myhouse.lanToken')
+export function getSessionToken(): string | null { return runtimeSessionToken }
+export function setSessionToken(value: string | null): void {
+  runtimeSessionToken = value && value.trim() ? value.trim() : null
+  if (runtimeSessionToken) localStorage.setItem('myhouse.sessionToken', runtimeSessionToken)
+  else localStorage.removeItem('myhouse.sessionToken')
 }
 
 /**
  * 附件内容 URL，供 <img>/<a> 直接使用。
- * <img> 标签不会带 Authorization 头，所以局域网模式下把 token 拼进 ?token=，
+ * <img> 标签不会带 Authorization 头，所以把会话令牌拼进 ?token=，
  * 后端 LanAuthFilter 会从 query 里识别（三种来源之一）。
  */
 export function attachmentUrl(id: number | null | undefined): string {
   if (id == null) return ''
   const base = apiUrl(`/api/attachments/${id}/content`)
-  return runtimeLanToken ? `${base}?token=${encodeURIComponent(runtimeLanToken)}` : base
+  return runtimeSessionToken ? `${base}?token=${encodeURIComponent(runtimeSessionToken)}` : base
 }
 
 export interface ApiOptions extends Omit<RequestInit, 'signal'> {
@@ -84,12 +89,12 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  if (runtimeLanToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${runtimeLanToken}`)
+  if (runtimeSessionToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${runtimeSessionToken}`)
   }
   // 并发去重：仅对安全 GET 合并
   const dedupeKey = (method === 'GET' && !signal)
-    ? `${runtimeApiBase}|${runtimeLanToken}|${path}`
+    ? `${runtimeApiBase}|${runtimeSessionToken}|${path}`
     : ''
   if (dedupeKey && inFlight.has(dedupeKey)) {
     return inFlight.get(dedupeKey) as Promise<T>
@@ -109,7 +114,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           connection.status = 'unauthorized'
-          connection.message = '连接未获授权，请检查家庭访问密钥和服务地址。'
+          connection.message = '连接未获授权，请重新登录家庭账号。'
         } else if (response.status >= 500) {
           connection.status = 'offline'
           connection.message = '服务器暂时无法处理请求，请稍后重新连接。'

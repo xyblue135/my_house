@@ -1,6 +1,6 @@
 server:
   address: ${MYHOUSE_BIND_ADDRESS:127.0.0.1}
-  port: ${SERVER_PORT:8765}
+  port: ${SERVER_PORT:10100}
 
 spring:
   application:
@@ -19,10 +19,7 @@ spring:
 
 myhouse:
   data-dir: ${MYHOUSE_DATA_DIR:../data}
-  # 外网/反向代理也必须配置；配置后本机请求同样需要认证。旧变量仍兼容。
-  lan-token: ${MYHOUSE_ACCESS_TOKEN:${MYHOUSE_LAN_TOKEN:}}
-  require-auth: ${MYHOUSE_REQUIRE_AUTH:false}
-  # 可选的家庭账号登录（连接页用账号密码换访问密钥）。仅在数据目录没有 account.json 时生效。
+  # 家庭账号登录（连接页用账号密码换会话令牌）。仅在数据目录没有 account.json 时生效。
   auth-username: ${MYHOUSE_AUTH_USERNAME:}
   auth-password: ${MYHOUSE_AUTH_PASSWORD:}
   rabbitmq:

@@ -37,9 +37,9 @@ describe('online-only writes', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
   it('verifies service and sends the key, then permits writes', async () => {
-    const { api, setApiBase, setLanToken, checkConnection, connection } = await import('../src/api')
+    const { api, setApiBase, setSessionToken, checkConnection, connection } = await import('../src/api')
     setApiBase('https://[2001:db8::1]:8443')
-    setLanToken('test-key')
+    setSessionToken('test-key')
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ service: 'myhouse', status: 'ok', api_version: 1 }))
     await checkConnection()
     expect(connection.status).toBe('online')

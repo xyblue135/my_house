@@ -167,7 +167,7 @@ try {
 
     if (-not $env:MYHOUSE_DATA_DIR) { $env:MYHOUSE_DATA_DIR = Join-Path $repoRoot 'data' }
     if (-not [System.IO.Path]::IsPathRooted($env:MYHOUSE_DATA_DIR)) { $env:MYHOUSE_DATA_DIR = Join-Path $repoRoot $env:MYHOUSE_DATA_DIR }
-    if (-not $env:SERVER_PORT) { $env:SERVER_PORT = '8765' }
+    if (-not $env:SERVER_PORT) { $env:SERVER_PORT = '10100' }
     $port = 0
     if (-not [int]::TryParse($env:SERVER_PORT, [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw 'SERVER_PORT must be an integer between 1 and 65535.' }
     if (-not $env:MYHOUSE_BIND_ADDRESS) { $env:MYHOUSE_BIND_ADDRESS = '127.0.0.1' }
@@ -177,7 +177,7 @@ try {
         Assert-FreePort $port
     }
     if ($Mode -eq 'dev') {
-        if ($port -ne 8765 -or $env:MYHOUSE_BIND_ADDRESS -ne '127.0.0.1') { throw 'Dev mode requires SERVER_PORT=8765 and MYHOUSE_BIND_ADDRESS=127.0.0.1 to match the Vite proxy.' }
+        if ($port -ne 10100 -or $env:MYHOUSE_BIND_ADDRESS -ne '127.0.0.1') { throw 'Dev mode requires SERVER_PORT=10100 and MYHOUSE_BIND_ADDRESS=127.0.0.1 to match the Vite proxy.' }
         Assert-FreePort 15473
         Use-Pnpm
         Invoke-Frontend @('install', '--frozen-lockfile')
@@ -187,18 +187,12 @@ try {
         Build-App
     }
 
-    # 默认启动即对局域网开放：绑定 0.0.0.0 并自动复用/生成访问密钥。
+    # 默认启动即对局域网开放：绑定 0.0.0.0；连接认证统一走家庭账号密码（数据目录 account.json）。
     # dev 模式保持回环（Vite 代理固定 127.0.0.1），worker 不监听网络。
     $lanMode = $Mode -eq 'lan' -or $Mode -eq 'start' -or $Mode -eq 'rebuild'
     if ($lanMode) {
         $env:MYHOUSE_BIND_ADDRESS = '0.0.0.0'
-        if (-not $env:MYHOUSE_ACCESS_TOKEN) { $env:MYHOUSE_ACCESS_TOKEN = $env:MYHOUSE_LAN_TOKEN }
-        if (-not $env:MYHOUSE_ACCESS_TOKEN) {
-            $env:MYHOUSE_ACCESS_TOKEN = & (Join-Path $PSScriptRoot 'get-access-token.ps1') -DataDir $env:MYHOUSE_DATA_DIR
-            Write-Host ('[My House] Access key file: ' + (Join-Path $env:MYHOUSE_DATA_DIR 'access-token.txt'))
-        } else { Write-Host '[My House] Using the access key configured in the environment.' }
-        $env:MYHOUSE_REQUIRE_AUTH = 'true'
-        Write-Host '[My House] LAN mode requires an access key, including on this computer. Use HTTPS for public access.'
+        Write-Host '[My House] LAN mode. Clients log in with the family account on the connection page.'
         Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | ForEach-Object { Write-Host "[My House] LAN URL: http://$($_.IPAddress):$port" }
     }
 

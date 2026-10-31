@@ -10,7 +10,7 @@
 - 管理：操作历史与撤销，主搜索栏内的 AI 查找与操作确认。
 - 日常：房间视图摆放箱子与搜索定位、菜谱及图片。
 - 界面：手机底部导航与单列表单，电脑侧栏与多列布局，支持 PWA。
-- 连接：首次连接向导、账号密码或访问密钥认证、断线操作拦截、回到前台刷新。
+- 连接：首次连接向导、家庭账号密码登录、断线操作拦截、回到前台刷新。
 - 部署：HTTPS 域名与 IPv6 URL 支持，附 Caddy 和 systemd 配置示例。
 - 客户端：同仓库保留 Capacitor Android 工程。
 
@@ -33,7 +33,7 @@ cd ../backend
 
 | 入口 | 用途 |
 | --- | --- |
-| 双击 `start.bat` | 在局域网启动；未构建或源码有变化时自动重新构建，自动复用或生成访问密钥 |
+| 双击 `start.bat` | 在局域网启动；未构建或源码有变化时自动重新构建，服务端口 10100 |
 | `start.bat build` | 构建前端和后端，并运行后端测试 |
 | `start.bat rebuild` | 重新构建后在局域网启动，用于源码更新后 |
 | `start.bat dev` | 构建后端并启动后端与 Vite，仅本机访问，前端修改实时更新 |
@@ -44,9 +44,9 @@ cd ../backend
 
 Windows 根目录只保留 `start.bat`，共用逻辑在 `scripts/start.ps1`。优先使用 `JAVA_HOME` 或 PATH 中的 JDK 21+，并兼容本机原有 Java 路径。换电脑时设置 `JAVA_HOME` 即可。
 
-服务日志保存在数据目录的 `logs/` 下。按 Ctrl+C 停止启动器及其子服务；所有启动模式都可加 `-NoBrowser` 禁止自动打开浏览器。开发模式固定使用后端 8765、前端 15473，修改 Java 代码后需重启开发模式。
+服务日志保存在数据目录的 `logs/` 下。按 Ctrl+C 停止启动器及其子服务；所有启动模式都可加 `-NoBrowser` 禁止自动打开浏览器。开发模式固定使用后端 10100、前端 15473，修改 Java 代码后需重启开发模式。
 
-- Java 服务默认地址：`http://127.0.0.1:8765`。
+- Java 服务默认地址：`http://127.0.0.1:10100`。
 - Vite 开发地址：`http://127.0.0.1:15473`，将 `/api` 代理到 Java 服务。
 - `.env.example` 只是配置参考，不会自动载入；需要设置环境变量，或使用 systemd 的 `EnvironmentFile`。
 - 测试时将 `MYHOUSE_DATA_DIR` 指向独立目录，避免写入家庭数据。
@@ -87,7 +87,7 @@ cd android
 
 APK：`frontend/android/app/build/outputs/apk/debug/app-debug.apk`。长期发布需保存专用 release 签名密钥，更新包使用同一签名；签名文件不能提交 Git。
 
-App 打包本地构建的 Vue 页面。首次使用填写服务器 HTTPS 地址和家庭访问密钥。地址可通过 `VITE_API_BASE_URL` 预设，访问密钥不能放进 Vite 环境变量或 APK。
+App 打包本地构建的 Vue 页面。首次使用在连接页填写家庭账号和密码；服务地址在连接页右上角的齿轮设置里，可通过 `VITE_API_BASE_URL` 预设。密码不能放进 Vite 环境变量或 APK。
 
 App 只接受 HTTPS。裸 IPv6 URL 示例为 `https://[2001:db8::1]:8443`，实际地址需要有效的受信证书，建议使用域名；示例地址不能用于实际连接。
 
@@ -99,8 +99,9 @@ App 只接受 HTTPS。裸 IPv6 URL 示例为 `https://[2001:db8::1]:8443`，实�
 data/
 ├─ inventory.db
 ├─ attachments/
-├─ ai_settings.json   # 可选
-└─ access-token.txt   # start.bat lan 首次生成，勿公开
+├─ ai_settings.json     # 可选
+├─ account.json         # 家庭账号（账号 + 加盐哈希，不含明文密码；勿公开）
+└─ session-token.txt    # 首次启动自动生成的会话令牌，勿公开
 ```
 
 - 数据库和附件由服务器管理，备份与迁移应包含完整数据目录。
@@ -112,38 +113,40 @@ data/
 
 ## 外网部署与 IPv6
 
-推荐结构：`网页 / Android → HTTPS 域名 → Caddy → 127.0.0.1:8765 → SQLite + 附件`。
+推荐结构：`网页 / Android → HTTPS 域名 → Caddy → 127.0.0.1:10100 → SQLite + 附件`。
 
 IPv6 既需要应用正确处理 URL，也需要 DNS、监听和网络真正可达。有条件时同时配置 A 和 AAAA，兼容仅支持 IPv4 的网络。
 
 1. 构建前端和后端，将整合 JAR 上传为 `/opt/myhouse/myhouse.jar`。服务器需要 Java 21，无需 Node.js。
 2. 创建专用 `myhouse` 系统用户，将 [systemd 配置](deploy/myhouse.service) 放入 `/etc/systemd/system/`。
-3. 将 [环境变量示例](deploy/server.env.example) 复制到 `/etc/myhouse/server.env`，用 `openssl rand -hex 32` 生成密钥，填写 `MYHOUSE_ACCESS_TOKEN` 并限制文件读取权限。保留 `MYHOUSE_REQUIRE_AUTH=true`。
+3. 将 [环境变量示例](deploy/server.env.example) 复制到 `/etc/myhouse/server.env` 并限制文件读取权限。可选：填写 `MYHOUSE_AUTH_USERNAME` / `MYHOUSE_AUTH_PASSWORD` 用于首次启动自动生成家庭账号。
 4. 停止旧服务，备份并复制完整数据目录到 `/var/lib/myhouse/`，将目录归属设为 `myhouse`。不要让多台服务器共享写入同一个 SQLite 文件。
 5. 安装 Caddy，将 [站点配置](deploy/Caddyfile) 中的 `items.example.com` 替换为实际域名，放入 `/etc/caddy/Caddyfile`。已有站点时合并该站点块。
-6. DNS 的 A 指向公网 IPv4，AAAA 指向稳定的公网 IPv6。云安全组、系统防火墙和路由器允许对应地址族的 TCP 80/443；Java 的 8765 端口只监听回环。
+6. DNS 的 A 指向公网 IPv4，AAAA 指向稳定的公网 IPv6。云安全组、系统防火墙和路由器允许对应地址族的 TCP 80/443；Java 的 10100 端口只监听回环。
 7. 执行 `systemctl daemon-reload` 和 `systemctl enable --now myhouse`。通过 `caddy validate --config /etc/caddy/Caddyfile` 检查后 reload Caddy。Caddy 为有效域名申请和续期证书，见 [HTTPS 官方说明](https://caddyserver.com/docs/automatic-https)。
 
 在服务器以外、分别具备 IPv4 / IPv6 的网络检查：
 
 ```bash
-# 无密钥应返回 401。
+# 未登录应返回 401。
 curl -4 -i https://你的域名/api/connection
 curl -6 -i https://你的域名/api/connection
-# 带密钥应返回 service=myhouse、api_version=1、status=ok。
-curl -4 -H "Authorization: Bearer $MYHOUSE_ACCESS_TOKEN" https://你的域名/api/connection
-curl -6 -H "Authorization: Bearer $MYHOUSE_ACCESS_TOKEN" https://你的域名/api/connection
+# 登录换取会话令牌（密码错误返回 401）。
+TOKEN=$(curl -s -X POST https://你的域名/api/auth/login   -H "Content-Type: application/json"   -d '{"username":"家庭账号","password":"密码"}' | sed -n 's/.*"token":"\([^"]*\)".*//p')
+# 带令牌应返回 service=myhouse、api_version=1、status=ok。
+curl -4 -H "Authorization: Bearer $TOKEN" https://你的域名/api/connection
+curl -6 -H "Authorization: Bearer $TOKEN" https://你的域名/api/connection
 ```
 
 Java 直接监听 IPv6 可设 `MYHOUSE_BIND_ADDRESS=::`；能否同时接收 IPv4 取决于 JVM 与操作系统，需要实测。生产优先由 Caddy 处理公网双栈和 TLS。
 
 ### 访问边界
 
-- 本机开发可不配置密钥。设置 `MYHOUSE_ACCESS_TOKEN` 后，本机和远程 API 均需认证；旧名 `MYHOUSE_LAN_TOKEN` 仍兼容。公开监听缺少密钥时拒绝启动，公网密钥至少 32 位。
-- 可选的家庭账号登录：连接页可用账号密码登录（`POST /api/auth/login`），成功后发放与访问密钥相同的凭证，权限完全一致。凭据存于数据目录 `account.json`（只存加盐哈希，勿提交 Git）；首次启动前设置 `MYHOUSE_AUTH_USERNAME` / `MYHOUSE_AUTH_PASSWORD` 可自动生成，删除该文件即停用账号登录。登录失败统一延迟 400ms 以减缓暴力尝试。
-- 家庭共享密钥具有完整读写与删除权限；房间只是物品归属分类，不是独立账号权限。不适合直接开放给互不信任的多个家庭。
-- 一般 API 使用 Bearer 请求头。媒体内容为兼容浏览器标签使用查询密钥，并设置 `no-store`、`no-referrer`；自建访问日志需屏蔽查询字符串和认证头。
-- 密钥保存在设备应用存储中，Android 禁止系统应用备份。轮换共享密钥后，各设备需重新输入。
+- 所有 API 都需要登录：连接页使用家庭账号密码登录（`POST /api/auth/login`），成功后服务端发放会话令牌，客户端自动携带；服务端口默认 10100。
+- 账号凭据存于数据目录 `account.json`（只存加盐 SHA-256，不含明文密码，勿提交 Git）；首次启动前设置 `MYHOUSE_AUTH_USERNAME` / `MYHOUSE_AUTH_PASSWORD` 可自动生成。删除 `account.json` 后登录接口返回 503，删除 `session-token.txt` 并重启即可让所有设备下线。
+- 登录失败统一延迟 400ms 以减缓暴力尝试；家庭只有一个账号，具有完整读写与删除权限，房间只是物品归属分类，不是独立账号权限。不适合直接开放给互不信任的多个家庭。
+- 一般 API 使用 Bearer 请求头。媒体内容为兼容浏览器标签使用查询令牌，并设置 `no-store`、`no-referrer`；自建访问日志需屏蔽查询字符串和认证头。
+- 会话令牌保存在设备应用存储中，Android 禁止系统应用备份。删除服务端 `session-token.txt` 并重启后，各设备需重新登录。
 
 ## 验证记录
 
