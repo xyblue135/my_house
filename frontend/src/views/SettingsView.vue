@@ -11,6 +11,9 @@ import {
 } from '../local/sync'
 import { snapshotExists, snapshotTime, restoreSnapshot } from '../local/storage'
 import {
+  APP_VERSION, updateInfo, updateError, updateRepo, setUpdateRepo, checkForUpdate,
+} from '../composables/useAppUpdate'
+import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
   setTtsEnabled, setTtsCustomOn, setTtsCustomUrl, setTtsCustomKey, speak,
 } from '../composables/useSpeech'
@@ -127,6 +130,27 @@ async function pullSlot(slot: SlotKey) {
     toast((error as Error).message)
   } finally { syncSlots[slot].busy = false }
 }
+// ---- 检查更新 ----
+const checking = ref(false)
+const updateMessage = ref('')
+async function runUpdateCheck() {
+  if (checking.value) return
+  checking.value = true
+  updateMessage.value = ''
+  try {
+    const info = await checkForUpdate()
+    updateMessage.value = info.available
+      ? `发现新版本 ${info.version}，可下载安装`
+      : `当前已是最新版本（v${APP_VERSION}）`
+  } catch (error) {
+    updateMessage.value = (error as Error).message
+  } finally { checking.value = false }
+}
+function downloadUpdate() {
+  if (updateInfo.value?.apkUrl) window.open(updateInfo.value.apkUrl, '_blank')
+  else if (updateInfo.value) window.open(updateInfo.value.releaseUrl, '_blank')
+}
+
 function restoreSnapshotClick() {
   if (!window.confirm('恢复快照会把本机数据替换为「最近一次拉取前」的状态（当前数据与快照互换）。继续？')) return
   void restoreSnapshot().then(() => location.reload()).catch((error) => toast((error as Error).message))
@@ -164,6 +188,42 @@ async function testAi() {
         <p class="page-description">查找范围与功能开关，也照顾好你的数据。</p>
       </div>
     </div>
+    <details class="settings-collapse" open>
+      <summary>检查更新<AppIcon name="down" :size="18" /></summary>
+      <div class="settings-card">
+      <div class="settings-title">
+        <div class="settings-icon"><AppIcon name="download" /></div>
+        <div>
+          <h3>检查更新</h3>
+          <p>当前版本 v{{ APP_VERSION }}。App 每天自动检查一次；也可在这里手动检查并下载新版本。</p>
+        </div>
+      </div>
+      <label
+        >更新检查仓库地址<input
+          :value="updateRepo"
+          type="text"
+          inputmode="url"
+          placeholder="https://github.com/xyblue135/my_house"
+          @change="setUpdateRepo(($event.target as HTMLInputElement).value)"
+      /></label>
+      <div class="settings-actions">
+        <button class="primary-btn" :disabled="checking" @click="runUpdateCheck">
+          {{ checking ? '检查中…' : '检查更新' }}
+        </button>
+        <button
+          v-if="updateInfo?.available"
+          class="outline-btn"
+          @click="downloadUpdate"
+        >下载 v{{ updateInfo.version }}</button>
+      </div>
+      <p v-if="updateMessage" class="cloud-message" role="status">{{ updateMessage }}</p>
+      <details v-if="updateInfo?.available && updateInfo.notes" class="muted">
+        <summary style="list-style: none; cursor: pointer">查看更新说明</summary>
+        <p style="white-space: pre-wrap">{{ updateInfo.notes }}</p>
+      </details>
+      </div>
+    </details>
+
     <div class="settings-card">
       <div class="settings-title">
         <div class="settings-icon"><AppIcon name="search" /></div>

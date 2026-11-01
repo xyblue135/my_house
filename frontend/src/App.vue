@@ -7,6 +7,7 @@ import AppIcon from './components/AppIcon.vue'
 import { onMounted, ref, computed } from 'vue'
 import { connection } from './api'
 import { providers, lastSyncText } from './local/sync'
+import { shouldSuggestUpdate, updateInfo } from './composables/useAppUpdate'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
 import { useToast } from './composables/useToast'
@@ -75,7 +76,10 @@ provideItemModals(modals)
             <p v-for="row in syncInfo" :key="row.label" class="sync-info-row">
               <span>{{ row.label }}</span><b>{{ row.value }}</b>
             </p>
-            <p class="sync-info-tip">推送 / 拉取在「设置 → 云同步」。</p>
+            <p v-if="shouldSuggestUpdate()" class="sync-info-row">
+              <span>发现新版本</span><b>{{ updateInfo?.version }}</b>
+            </p>
+            <p class="sync-info-tip">推送 / 拉取在「设置 → 云同步」，更新在「设置 → 检查更新」。</p>
           </div>
         </div>
       </header>
