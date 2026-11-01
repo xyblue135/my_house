@@ -7,17 +7,16 @@
  */
 import { reactive } from 'vue'
 
-export type LightState = 'ok' | 'fail' | 'none'
+export type LightState = 'ok' | 'fail' | 'none' | 'testing'
 
 const KEY = 'myhouse.statusLights'
 
 function load(): { cloud: LightState; ai: LightState } {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || '{}')
-    return {
-      cloud: raw.cloud === 'ok' || raw.cloud === 'fail' ? raw.cloud : 'none',
-      ai: raw.ai === 'ok' || raw.ai === 'fail' ? raw.ai : 'none',
-    }
+    const valid = (v: unknown): LightState =>
+      v === 'ok' || v === 'fail' || v === 'testing' ? v : 'none'
+    return { cloud: valid(raw.cloud), ai: valid(raw.ai) }
   } catch {
     return { cloud: 'none', ai: 'none' }
   }
@@ -30,8 +29,10 @@ export function setLight(kind: 'cloud' | 'ai', state: LightState): void {
   try { localStorage.setItem(KEY, JSON.stringify(lights)) } catch { /* 仅本次会话生效 */ }
 }
 
-export const LIGHT_LABEL: Record<string, string> = {
+export const LIGHT_LABEL: Record<LightState, string> = {
   ok: '正常',
   fail: '异常',
-  none: '未测试',
+  none: '未配置',
+  testing: '测试中…',
 }
+

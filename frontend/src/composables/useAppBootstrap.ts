@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { api, AbortScope, connection } from '../api'
 import { initLocal } from '../local/state'
 import { useAppStore } from '../store'
-import { autoCheckOnLaunch } from './useAppUpdate'
+import { autoCheckOnLaunch, runStartupTests } from './useAppUpdate'
 import type { Container, ContainerGroup, Dashboard, Item, Member } from '../types'
 
 const summary = ref({ containers: 0, items: 0, quantity: 0, special: 0 })
@@ -50,6 +50,7 @@ export function useAppBootstrap() {
       await loadAll()
       ready.value = true
       void autoCheckOnLaunch()
+      void runStartupTests()
     } catch (error) {
       connection.status = 'offline'
       connection.message = `本地数据加载失败：${(error as Error).message}`

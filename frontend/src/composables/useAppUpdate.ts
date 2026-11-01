@@ -7,6 +7,10 @@
  * 私有仓库的检查更新需要把令牌也填入下方更新令牌（只存本机）。
  */
 import { ref } from 'vue'
+import { setLight } from '../local/statusLights'
+import { providers, verifyProvider } from '../local/sync'
+import { state } from '../local/state'
+import { aiTest } from '../local/ai'
 
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 
@@ -101,4 +105,32 @@ export async function autoCheckOnLaunch(): Promise<void> {
 
 export function shouldSuggestUpdate(): boolean {
   return !!updateInfo.value?.available
+}
+
+/**
+ * 启动联通性测试：逐个测试已配置的云仓库与 AI 网关。
+ * 测试期间对应灯闪烁（testing），结束按结果 ok / fail；未配置则灰。
+ */
+export async function runStartupTests(): Promise<void> {
+  const configured = (['github', 'gitee'] as const).filter(
+    (p) => providers[p].url.trim() && providers[p].token.trim(),
+  )
+  if (configured.length) {
+    setLight('cloud', 'testing')
+    const results = await Promise.allSettled(configured.map((p) => verifyProvider(p, providers[p])))
+    setLight('cloud', results.some((r) => r.status === 'fulfilled') ? 'ok' : 'fail')
+  } else {
+    setLight('cloud', 'none')
+  }
+  if (state.ai.base_url.trim()) {
+    setLight('ai', 'testing')
+    try {
+      const message = await aiTest()
+      setLight('ai', message.startsWith('✓') ? 'ok' : 'fail')
+    } catch {
+      setLight('ai', 'fail')
+    }
+  } else {
+    setLight('ai', 'none')
+  }
 }
