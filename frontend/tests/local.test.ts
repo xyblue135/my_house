@@ -78,7 +78,9 @@ describe('local data layer', () => {
     expect(state.items.some((i) => i.id === item!.id)).toBe(false)
   })
 
-  it('ai chat falls back to local keyword search', async () => {
+  it('ai chat falls back to local keyword search', { timeout: 10000 }, async () => {
+    // 清空网关地址：强制走本地降级（CI 环境无网关）
+    state.ai.base_url = ''
     const container = await createContainer('检索箱')
     const containerId = (container as { id: number }).id
     await localApi({ method: 'POST', path: '/api/items', query: new URLSearchParams(), body: { container_id: containerId, name: '瑞士军刀' }, form: null })
