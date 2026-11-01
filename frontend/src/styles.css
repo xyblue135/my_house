@@ -2889,3 +2889,25 @@ button.online-status > span {
 .ai-inline-results .bubble {
   overflow-wrap: anywhere;
 }
+
+/* ---- 状态灯：本机/云端/AI ---- */
+.online-status .light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #c3ccc2;
+}
+.online-status .light.is-ok { background: #2e7d32; }
+.online-status .light.is-fail { background: #c0483f; }
+.sync-info-row .light {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+  background: #c3ccc2;
+  vertical-align: -1px;
+}
+.sync-info-row .light.is-ok { background: #2e7d32; }
+.sync-info-row .light.is-fail { background: #c0483f; }

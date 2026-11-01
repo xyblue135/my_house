@@ -7,6 +7,7 @@
  */
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { state, containerView, itemView, requireContainer, requireItem, nextId, now, logHistory, persist } from './state'
+import { setLight } from './statusLights'
 
 const isNative = Capacitor.isNativePlatform()
 let lastRawOutput = ''
@@ -17,23 +18,32 @@ async function gatewayRequest(path: string, init: { method: string; jsonBody?: u
   const url = `${base}${path}`
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (state.ai.api_key) headers.Authorization = `Bearer ${state.ai.api_key}`
-  if (isNative) {
-    const res = await CapacitorHttp.request({
-      url, method: init.method, headers,
-      data: init.jsonBody ?? undefined,
-      responseType: 'json',
-      readTimeout: 120000, connectTimeout: 15000,
-    })
-    return { status: res.status, data: res.data }
+  try {
+    let res: { status: number; data: any }
+    if (isNative) {
+      const r = await CapacitorHttp.request({
+        url, method: init.method, headers,
+        data: init.jsonBody ?? undefined,
+        responseType: 'json',
+        readTimeout: 120000, connectTimeout: 15000,
+      })
+      res = { status: r.status, data: r.data }
+    } else {
+      const r = await fetch(url, {
+        method: init.method, headers,
+        body: init.jsonBody ? JSON.stringify(init.jsonBody) : undefined,
+      })
+      const text = await r.text()
+      let data: unknown = text
+      try { data = JSON.parse(text) } catch { /* 保留原文 */ }
+      res = { status: r.status, data }
+    }
+    setLight('ai', res.status >= 200 && res.status < 300 ? 'ok' : 'fail')
+    return res
+  } catch (error) {
+    setLight('ai', 'fail')
+    throw error
   }
-  const res = await fetch(url, {
-    method: init.method, headers,
-    body: init.jsonBody ? JSON.stringify(init.jsonBody) : undefined,
-  })
-  const text = await res.text()
-  let data: unknown = text
-  try { data = JSON.parse(text) } catch { /* 保留原文 */ }
-  return { status: res.status, data }
 }
 
 interface AiAction { type: string; item_id?: number; container_id?: number; data?: Record<string, unknown> }

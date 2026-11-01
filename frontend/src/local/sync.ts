@@ -7,6 +7,7 @@
 import { CapacitorHttp } from '@capacitor/core'
 import { state, replaceState, blobAll, persistNow, type LocalState } from './state'
 import { snapshotAll } from './storage'
+import { setLight } from './statusLights'
 
 export interface ProviderConfig {
   /** 仓库地址，如 https://github.com/xyblue135/my_house_data */
@@ -177,7 +178,14 @@ async function requireOk(result: { status: number; data: unknown }, what: string
 }
 
 export async function verifyProvider(provider: 'github' | 'gitee', cfg: ProviderConfig): Promise<string> {
-  const repo = await requireOk(await request(provider, cfg, 'GET', ''), '验证仓库')
+  let repo: Record<string, unknown>
+  try {
+    repo = await requireOk(await request(provider, cfg, 'GET', ''), '验证仓库')
+    setLight('cloud', 'ok')
+  } catch (error) {
+    setLight('cloud', 'fail')
+    throw error
+  }
   const meta = await request(provider, cfg, 'GET', '/contents/backup/meta.json').catch(() => ({ status: 0, data: null }))
   const name = String((repo as Record<string, unknown>).full_name ?? `${cfg.url}`)
   const hasBackup = meta.status >= 200 && meta.status < 300

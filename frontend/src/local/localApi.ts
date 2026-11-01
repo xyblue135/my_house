@@ -8,7 +8,7 @@ import {
   summary, memberSummary, storeAttachment, removeAttachment, requireContainer, requireItem,
   type GroupRow,
 } from './state'
-import { aiChat, aiExecute } from './ai'
+import { aiChat, aiExecute, aiPlanAction } from './ai'
 
 export interface LocalRequest {
   method: string
@@ -432,6 +432,9 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
   }
   if ((path === '/api/ai/chat' || path === '/api/chat') && method === 'POST') {
     return await aiChat(str(b.message))
+  }
+  if (path === '/api/ai/plan' && method === 'POST') {
+    return await aiPlanAction(str(b.message))
   }
   if (path === '/api/ai/execute' && method === 'POST') {
     return aiExecute((b.action ?? {}) as { type: string; item_id?: number; container_id?: number; data?: Record<string, unknown> })

@@ -10,6 +10,7 @@ import { APP_VERSION, connection } from './api'
 
 import { providers, lastSyncText } from './local/sync'
 import { shouldSuggestUpdate, updateInfo } from './composables/useAppUpdate'
+import { lights, LIGHT_LABEL } from './local/statusLights'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
 import { useToast } from './composables/useToast'
@@ -108,17 +109,24 @@ provideItemModals(modals)
             aria-label="查看数据与同步信息"
             @click.stop="showSyncInfo = !showSyncInfo"
           >
-            <span></span>本机数据
+            <span class="light" title="本机数据"></span
+            ><span class="light" :class="'is-' + lights.cloud" title="云端同步"></span
+            ><span class="light" :class="'is-' + lights.ai" title="AI 接口"></span>
+            本机数据
           </button>
           <div v-if="showSyncInfo" class="sync-info-pop" @click.stop>
-            <p class="sync-info-title">数据与同步</p>
+            <p class="sync-info-title">状态灯</p>
+            <p class="sync-info-row"><span><span class="light" ></span> 本机数据</span><b>正常</b></p>
+            <p class="sync-info-row"><span><span class="light" :class="'is-' + lights.cloud"></span> 云端同步</span><b>{{ LIGHT_LABEL[lights.cloud] }}</b></p>
+            <p class="sync-info-row"><span><span class="light" :class="'is-' + lights.ai"></span> AI 接口</span><b>{{ LIGHT_LABEL[lights.ai] }}</b></p>
+            <p class="sync-info-title" style="margin-top: 12px">数据与同步</p>
             <p v-for="row in syncInfo" :key="row.label" class="sync-info-row">
               <span>{{ row.label }}</span><b>{{ row.value }}</b>
             </p>
             <p v-if="shouldSuggestUpdate()" class="sync-info-row">
               <span>发现新版本</span><b>{{ updateInfo?.version }}</b>
             </p>
-            <p class="sync-info-tip">推送 / 拉取在「设置 → 云同步」，更新在「设置 → 检查更新」。</p>
+            <p class="sync-info-tip">云端的测试/推送/拉取在「设置 → 云同步」；AI 测试在「设置 → AI 接口」；更新在「设置 → 检查更新」。</p>
           </div>
         </div>
       </header>
