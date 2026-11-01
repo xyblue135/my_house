@@ -39,11 +39,12 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
-
       - name: 同步 Capacitor
         working-directory: frontend
         run: pnpm exec cap sync android
+
+      - name: 接受 Android 许可
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: 构建 Debug APK
         working-directory: frontend/android
