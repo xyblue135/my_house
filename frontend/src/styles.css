@@ -2848,3 +2848,27 @@ button.online-status > span {
 @media (prefers-reduced-motion: reduce) {
   .hs-cloud, .hs-box, .hs-tree, .hs-sparkle { animation: none; }
 }
+
+/* ---- 品牌版本号与轮换 slogan ---- */
+.app-version {
+  font-size: 11px;
+  font-weight: 600;
+  color: #89918a;
+  background: #eef1ee;
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 2px;
+  vertical-align: 2px;
+}
+.slogan-fade-enter-active,
+.slogan-fade-leave-active {
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+.slogan-fade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.slogan-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}

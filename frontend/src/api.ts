@@ -74,6 +74,10 @@ export class AbortScope {
   }
 }
 
+/** App 版本号（vite 构建时从 package.json 注入） */
+declare const __APP_VERSION__: string
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.1.1'
+
 export async function checkConnection(): Promise<void> {
   connection.status = 'online'
   connection.message = ''

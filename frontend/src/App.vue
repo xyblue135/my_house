@@ -4,8 +4,10 @@ import GlobalModals from './components/GlobalModals.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import SetupGate from './components/SetupGate.vue'
 import AppIcon from './components/AppIcon.vue'
-import { onMounted, ref, computed } from 'vue'
-import { connection } from './api'
+import { onBeforeUnmount, onMounted, ref, computed } from 'vue'
+import { APP_VERSION, connection } from './api'
+
+
 import { providers, lastSyncText } from './local/sync'
 import { shouldSuggestUpdate, updateInfo } from './composables/useAppUpdate'
 import { useAppBootstrap } from './composables/useAppBootstrap'
@@ -15,6 +17,41 @@ import { useToast } from './composables/useToast'
 const { installPrompt, installApp, ready, connect } = useAppBootstrap()
 // 首启初始化只出现一次；之后数据常驻本机，打开即用
 const setupDone = ref(localStorage.getItem('myhouse.setupDone') === '1')
+
+// 品牌语：20 句收纳主题短句，首页每 5 秒轮换一次（淡入淡出）
+const SLOGANS = [
+  '把家里的日常，收在一起',
+  '每一件物品，都有它的位置',
+  '找得到，是最踏实的安心',
+  '收纳有序，生活有度',
+  '家越理越顺，日子越过越轻',
+  '给每样东西一个家',
+  '打开箱子，就找到了答案',
+  '井井有条，从这一箱开始',
+  '物尽其位，用时不慌',
+  '记录每一次安放',
+  '家的角落，藏着生活的秩序',
+  '少翻一次抽屉，多一分从容',
+  '收的是物品，理的是心情',
+  '让每样东西都触手可及',
+  '东西有家，心就不慌',
+  '分门别类，一眼可见',
+  '整理今天，方便明天',
+  '小小收纳，大大从容',
+  '家常物件，也值得被记住',
+  '生活有序，日常有光',
+]
+const sloganIndex = ref(0)
+const slogan = computed(() => SLOGANS[sloganIndex.value] ?? SLOGANS[0])
+let sloganTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  sloganTimer = setInterval(() => {
+    sloganIndex.value = (sloganIndex.value + 1) % SLOGANS.length
+  }, 5000)
+})
+onBeforeUnmount(() => {
+  if (sloganTimer) clearInterval(sloganTimer)
+})
 onMounted(() => { document.addEventListener('click', () => { showSyncInfo.value = false }) })
 // 右上角状态预览：本机数据 + 两个云仓库的配置与最近同步
 const showSyncInfo = ref(false)
@@ -53,7 +90,7 @@ provideItemModals(modals)
       <header class="topbar">
         <div class="mobile-brand">
           <span class="brand-mark"><img class="brand-logo" src="/icons/icon-192.png" alt="" /></span
-          ><span>物栈<small>把家里的日常，收在一起</small></span>
+          ><span>物栈<small class="app-version">v{{ APP_VERSION }}</small><Transition name="slogan-fade" mode="out-in"><small :key="slogan" class="slogan">{{ slogan }}</small></Transition></span>
         </div>
         <div class="desktop-breadcrumb">
           <AppIcon name="home" :size="17" /><span>我的家</span
