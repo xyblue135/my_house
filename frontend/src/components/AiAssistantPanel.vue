@@ -21,6 +21,9 @@ interface ChatMessage {
   executed?: boolean
   executing?: boolean
   error?: string
+  attempts?: number
+  /** 用户在确认卡里可调整的字段（归属箱子/名称/数量） */
+  edit?: { name?: string; container_id?: number; quantity?: number | null }
 }
 
 const chatMessages = ref<ChatMessage[]>([])
@@ -29,6 +32,54 @@ const executing = ref(false)
 const busy = computed(() => chatBusy.value || executing.value)
 const chatList = ref<HTMLElement | null>(null)
 const chatSuggestions = ['耳机', '哪些物品状态不正常？', '我有哪些箱子？']
+// AI 整理：与查找分离的写操作入口（格式校验 → 自动重试 → 用户确认卡）
+const actionText = ref('')
+const planning = ref(false)
+
+function editOf(message: ChatMessage) {
+  if (!message.edit) {
+    message.edit = {}
+    if (message.action?.type === 'add_item') {
+      message.edit.name = String(message.action.data?.name ?? '')
+      message.edit.container_id = message.action.data?.container_id != null
+        ? Number(message.action.data.container_id) : undefined
+      message.edit.quantity = message.action.data?.quantity != null ? Number(message.action.data.quantity) : null
+    }
+    if (message.action?.type === 'move_item' && message.action.container_id != null) {
+      message.edit.container_id = Number(message.action.container_id)
+    }
+  }
+  return message.edit
+}
+
+async function planAndConfirm() {
+  const value = actionText.value.trim()
+  if (!value || planning.value || busy.value) return
+  const ownerIds = [...props.ownerIds]
+  const scopeLabel = props.scopeLabel
+  planning.value = true
+  try {
+    const plan = await api<{ reply: string; action: AiAction | null; attempts: number }>('/api/ai/plan', {
+      method: 'POST',
+      body: JSON.stringify({ message: value, owner_ids: ownerIds }),
+      timeoutMs: 55000,
+    })
+    chatMessages.value.push({ id: messageId++, role: 'user', text: `〔整理〕${value}`, ownerIds, scopeLabel })
+    const message: ChatMessage = {
+      id: messageId++, role: 'assistant', text: plan.reply || '已解析。', ownerIds, scopeLabel,
+      action: plan.action, attempts: plan.attempts,
+    }
+    if (plan.action) editOf(message)
+    chatMessages.value.push(message)
+    actionText.value = ''
+  } catch (error) {
+    chatMessages.value.push({ id: messageId++, role: 'assistant', text: `解析失败：${(error as Error).message}`, ownerIds, scopeLabel })
+  } finally {
+    planning.value = false
+    await nextTick()
+    scrollChat()
+  }
+}
 let messageId = 1
 let generation = 0
 let request: AbortController | null = null
@@ -59,13 +110,33 @@ function describeAction(action: AiAction) {
 
 async function executeAction(message: ChatMessage) {
   if (!message.action || message.executed || busy.value) return
+  // 人工确认环节：用户可修改归属箱子与物品内容，这里合并回 action
+  const action = { ...message.action, data: { ...(message.action.data ?? {}) } }
+  const edit = message.edit
+  if (edit) {
+    if (action.type === 'add_item') {
+      if (edit.name != null) action.data.name = edit.name
+      if (edit.container_id != null) action.data.container_id = edit.container_id
+      if (edit.quantity != null) action.data.quantity = edit.quantity
+    }
+    if (action.type === 'move_item' && edit.container_id != null) action.container_id = edit.container_id
+    if (action.type === 'add_container' && edit.name != null) action.data.name = edit.name
+    if ((action.type === 'add_item' || action.type === 'add_container') && !String(action.data.name ?? '').trim()) {
+      message.error = '名称不能为空'
+      return
+    }
+    if (action.type === 'add_item' && action.data.container_id == null) {
+      message.error = '请选择放入的箱子'
+      return
+    }
+  }
   message.error = ''
   message.executing = true
   executing.value = true
   try {
     const result = await api<{ message: string }>('/api/ai/execute', {
       method: 'POST',
-      body: JSON.stringify({ action: message.action, owner_ids: message.ownerIds }),
+      body: JSON.stringify({ action, owner_ids: message.ownerIds }),
     })
     message.text += '\n\n' + result.message
     message.executed = true
@@ -128,7 +199,7 @@ defineExpose({ sendChat })
       <div class="ai-avatar"><AppIcon name="sparkles" /></div>
       <div>
         <h3>AI 查找</h3>
-        <p>在上方输入要找的物品或整理要求，修改前会请你确认。</p>
+        <p>查找用上方搜索框（只读）；要 AI 执行整理，在下方输入指令，确认后才会生效。</p>
       </div>
       <button v-if="chatMessages.length" class="text-btn" :disabled="busy" @click="reset">清空</button>
     </div>
@@ -138,7 +209,19 @@ defineExpose({ sendChat })
           {{ message.text }}
           <div v-if="message.action && !message.executed" class="action-card">
             <p>待确认：{{ describeAction(message.action) }}</p>
-            <p class="muted">操作范围：{{ message.scopeLabel }}</p>
+            <p class="muted">操作范围：{{ message.scopeLabel }} · 解析尝试 {{ message.attempts ?? 1 }} 次</p>
+            <div v-if="message.action.type === 'add_item'" class="action-fields">
+              <label>物品名称<input v-model="editOf(message).name" /></label>
+              <label>放入箱子<select v-model="editOf(message).container_id">
+                <option v-for="c in store.containers" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select></label>
+              <label>数量<input type="number" min="1" v-model.number="editOf(message).quantity" /></label>
+            </div>
+            <div v-else-if="message.action.type === 'move_item'" class="action-fields">
+              <label>移入箱子<select v-model="editOf(message).container_id">
+                <option v-for="c in store.containers" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select></label>
+            </div>
             <p v-if="message.error" class="action-error" role="alert">{{ message.error }}</p>
             <button :disabled="busy" @click="executeAction(message)">{{ message.executing ? '执行中…' : '确认执行' }}</button>
           </div>
@@ -148,6 +231,18 @@ defineExpose({ sendChat })
     </div>
     <div v-else class="suggestions">
       <button v-for="suggestion in chatSuggestions" :key="suggestion" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
+    </div>
+    <div class="plan-row">
+      <input
+        v-model="actionText"
+        type="text"
+        :disabled="planning || busy"
+        placeholder="整理指令，如：把手办放到铭瑄B760M主板箱子"
+        @keydown.enter.prevent="planAndConfirm"
+      />
+      <button class="primary-btn" :disabled="planning || busy || !actionText.trim()" @click="planAndConfirm">
+        {{ planning ? '解析中…' : 'AI 整理' }}
+      </button>
     </div>
   </section>
 </template>

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { freshState, state } from '../src/local/state'
 import { localApi } from '../src/local/localApi'
+import { validateAction } from '../src/local/ai'
 import type { Container } from '../src/types'
 
 function reset() {
@@ -87,5 +88,23 @@ describe('local data layer', () => {
     const result = await localApi({ method: 'POST', path: '/api/ai/chat', query: new URLSearchParams(), body: { message: '军刀在哪', owner_ids: [1] }, form: null }) as { mode: string; reply: string }
     expect(result.mode).toBe('local')
     expect(result.reply).toContain('瑞士军刀')
+  })
+})
+
+describe('validateAction（AI 输出格式校验）', () => {
+  beforeEach(() => { Object.assign(state, freshState()) })
+
+  it('拒绝未知类型与缺失名称', () => {
+    expect(() => localApi && undefined).not.toThrow()
+expect(() => validateAction({ type: 'teleport' })).toThrow('未知的操作类型')
+    expect(() => validateAction({ type: 'add_item', data: { name: '  ' } })).toThrow('缺少物品名称')
+    expect(() => validateAction({ type: 'add_item', data: { name: '手办' } })).toThrow('不存在')
+  })
+
+  it('合法 action 通过校验', () => {
+// 先造一个箱子
+    state.containers.unshift({ id: 1, name: '轩', notes: '', owner_id: 1, group_id: null, pos_x: null, pos_y: null, pos_z: null, size_w: null, size_h: null, size_d: null, created_at: '', updated_at: '' })
+    const a = validateAction({ type: 'add_item', data: { name: '手办', container_id: 1 } })
+    expect(a.data?.name).toBe('手办')
   })
 })

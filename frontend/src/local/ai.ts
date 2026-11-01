@@ -1,12 +1,15 @@
 /**
  * 本地 AI：App 直连用户配置的 OpenAI 兼容接口（chat/completions）。
- * 协议与原服务端 AiService 一致：严格 JSON {reply, action}，识别失败降级本地关键词检索。
- * base_url 示例：http://192.168.3.100:31415/v1（网关在电脑上时手机填电脑局域网 IP）
+ * 两条通道严格分离：
+ *  - aiChat（查找）：只读问答，绝不生成修改指令；失败降级本地关键词检索
+ *  - aiPlanAction（整理）：生成待确认操作，严格格式校验 + 失败自动重试，
+ *    校验通过后仍需用户在确认卡里核对归属与内容才会执行
  */
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { state, containerView, itemView, requireContainer, requireItem, nextId, now, logHistory, persist } from './state'
 
 const isNative = Capacitor.isNativePlatform()
+let lastRawOutput = ''
 
 /** 网关请求：App 内走原生 HTTP（绕过 WebView 的 CORS 与混合内容限制），网页走 fetch。 */
 async function gatewayRequest(path: string, init: { method: string; jsonBody?: unknown }): Promise<{ status: number; data: any }> {
@@ -49,39 +52,75 @@ function context(): string {
   return `箱子和分组：\n${containers || '（无）'}\n\n分组：${groups || '（无）'}\n\n物品：\n${items || '（无）'}`
 }
 
-const SYSTEM_PROMPT = `你是"我的家"家庭物品数据库助手。根据下面的库存上下文回答问题。
+const READ_PROMPT = `你是"我的家"家庭物品查询助手。只根据下面的库存上下文回答**查找类**问题（物品在哪、有什么、数量多少）。
+你是只读的：绝不生成任何修改指令，绝不输出 JSON 指令；用户要求修改/整理/移动时，
+回复引导他使用「AI 整理」入口来执行。`
+
+const ACTION_PROMPT = `你是"我的家"家庭物品数据库助手。根据下面的库存上下文，把用户的整理指令解析成一个待确认操作。
 修改数据库时只生成一个待确认 action，不能说已经执行。允许的 action：
 {"type":"add_item","data":{"name":"...","container_id":1,"quantity":1,"quantity_text":"","condition":"正常","notes":"","tags":""}}
 {"type":"move_item","item_id":1,"container_id":2}
 {"type":"delete_item","item_id":1}
 {"type":"add_container","data":{"name":"...","notes":""}}
-任何 action 都必须指向上下文中存在的实体；不确定目标时 action=null 并追问。
+规则：
+- 物品已存在（看物品清单）→ move_item；不存在 → add_item
+- 任何 action 都必须指向上下文中存在的实体 id；不确定目标时 action=null 并在 reply 里追问
 严格只输出 JSON：{"reply":"中文回复","action":null或action对象}`
 
-async function callGateway(message: string): Promise<ChatResult> {
+/** 严格校验 AI 输出的 action：类型、必填字段、实体存在性。失败抛出具体原因。 */
+export function validateAction(raw: unknown): AiAction {
+  const a = raw as AiAction
+  if (!a || typeof a !== 'object' || Array.isArray(a)) throw new Error('输出必须是 JSON 对象')
+  const type = String(a.type ?? '')
+  const allowed = ['add_item', 'move_item', 'delete_item', 'add_container']
+  if (!allowed.includes(type)) throw new Error(`未知的操作类型「${type || '空'}」，允许：${allowed.join('、')}`)
+  if (type === 'move_item' || type === 'delete_item') {
+    const item = state.items.find((i) => i.id === Number(a.item_id))
+    if (!item) throw new Error(`item_id ${a.item_id} 在库存中不存在`)
+  }
+  if (type === 'move_item') requireContainer(Number(a.container_id))
+  if (type === 'add_item') {
+    if (!String(a.data?.name ?? '').trim()) throw new Error('add_item 缺少物品名称 data.name')
+    requireContainer(Number(a.data?.container_id))
+  }
+  if (type === 'add_container') {
+    if (!String(a.data?.name ?? '').trim()) throw new Error('add_container 缺少箱子名称 data.name')
+  }
+  return {
+    type,
+    item_id: a.item_id == null ? undefined : Number(a.item_id),
+    container_id: a.container_id == null ? undefined : Number(a.container_id),
+    data: (a.data ?? {}) as Record<string, unknown>,
+  }
+}
+
+function extractJson(content: string): unknown {
+  const start = content.indexOf('{')
+  const end = content.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('回复中没有找到 JSON')
+  return JSON.parse(content.slice(start, end + 1))
+}
+
+/** 查找（只读）：失败降级本地关键词检索。 */
+async function callGatewayReadonly(message: string): Promise<ChatResult> {
   if (!state.ai.base_url.trim()) throw new Error('AI 接口地址未配置（设置 → AI 接口）')
   const res = await gatewayRequest('/chat/completions', {
     method: 'POST',
     jsonBody: {
       model: state.ai.model || 'auto',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT + '\n\n' + context() },
+        { role: 'system', content: READ_PROMPT + '\n\n' + context() },
         { role: 'user', content: message },
       ],
     },
   })
   if (res.status < 200 || res.status >= 300) throw new Error(`AI 接口返回 HTTP ${res.status}`)
   const payload = res.data as Record<string, any>
-  const content = String(payload?.choices?.[0]?.message?.content ?? '')
-  const start = content.indexOf('{')
-  const end = content.lastIndexOf('}')
-  if (start < 0 || end <= start) return { reply: content.trim(), action: null, mode: 'ai' }
-  const parsed = JSON.parse(content.slice(start, end + 1)) as { reply?: string; action?: AiAction | null }
-  return { reply: String(parsed.reply ?? ''), action: parsed.action ?? null, mode: 'ai' }
+  return { reply: String(payload?.choices?.[0]?.message?.content ?? '').trim(), action: null, mode: 'ai' }
 }
 
 function localSearch(message: string): ChatResult {
-  const haystack = (i: { name: string; notes: string; tags: string }, containerName: string) =>
+  const hay = (i: { name: string; notes: string; tags: string }, containerName: string) =>
     (i.name + ' ' + i.notes + ' ' + i.tags + ' ' + containerName).toLocaleLowerCase()
   const text = message.trim().toLocaleLowerCase()
   // 中文无空格分词：用 2 字滑窗在物品文本里找命中（如「军刀在哪」命中「瑞士军刀」）
@@ -90,8 +129,8 @@ function localSearch(message: string): ChatResult {
   for (let i = 0; i + 2 <= text.length; i++) windows.add(text.slice(i, i + 2))
   const hits = state.items.filter((i) => {
     const c = state.containers.find((x) => x.id === i.container_id)
-    const hay = haystack(i, c?.name ?? '')
-    return [...windows].some((w) => hay.includes(w))
+    const h = hay(i, c?.name ?? '')
+    return [...windows].some((w) => h.includes(w))
   })
   if (!text || !hits.length) {
     return { reply: '没有找到对应的物品（本地关键词检索）。', action: null, mode: 'local' }
@@ -105,8 +144,9 @@ function localSearch(message: string): ChatResult {
 
 export async function aiChat(message: string): Promise<ChatResult> {
   try {
-    const result = await callGateway(message)
-    return result
+    if (!state.ai.base_url.trim()) return localSearch(message)
+    const res = await callGatewayReadonly(message)
+    return res.reply ? res : localSearch(message)
   } catch (error) {
     const fallback = localSearch(message)
     fallback.reply += `\n\nAI 接口调用失败（${(error as Error).message}），已降级到关键词检索。`
@@ -114,14 +154,63 @@ export async function aiChat(message: string): Promise<ChatResult> {
   }
 }
 
+export interface PlannedAction { reply: string; action: AiAction; attempts: number }
+
+/**
+ * 整理指令 → 待确认操作。
+ * 严格校验 + 自动重试：模型输出不合格时，把具体错误回传给模型修正，
+ * 最多 3 次；仍失败则抛错（用户可换个说法重试）。
+ */
+export async function aiPlanAction(message: string, onAttempt?: (attempt: number, error: string) => void): Promise<PlannedAction> {
+  if (!state.ai.base_url.trim()) throw new Error('AI 接口地址未配置（设置 → AI 接口）')
+  const messages: { role: string; content: string }[] = [
+    { role: 'system', content: ACTION_PROMPT + '\n\n' + context() },
+    { role: 'user', content: message },
+  ]
+  let lastError = ''
+  const attempts = 3
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempt > 1) {
+      messages.push({ role: 'assistant', content: lastRawOutput || '' })
+      messages.push({ role: 'user', content: `你的输出无效：${lastError}。请修正后严格只输出 {"reply":"...","action":{...}} 格式的 JSON。` })
+    }
+    onAttempt?.(attempt, lastError)
+    const res = await gatewayRequest('/chat/completions', {
+      method: 'POST',
+      jsonBody: { model: state.ai.model || 'auto', messages },
+    })
+    if (res.status < 200 || res.status >= 300) throw new Error(`AI 接口返回 HTTP ${res.status}`)
+    const payload = res.data as Record<string, any>
+    const content = String(payload?.choices?.[0]?.message?.content ?? '')
+    lastRawOutput = content
+    let parsed: { reply?: string; action?: unknown }
+    try {
+      parsed = extractJson(content) as { reply?: string; action?: unknown }
+    } catch {
+      lastError = '回复不是有效的 JSON'
+      lastRawOutput = content
+      continue
+    }
+    try {
+      const action = validateAction(parsed.action)
+      return { reply: String(parsed.reply ?? ''), action, attempts: attempt }
+    } catch (error) {
+      lastError = (error as Error).message
+      lastRawOutput = content
+    }
+  }
+  throw new Error(`AI 连续 ${attempts} 次未能生成有效操作（${lastError}），请换个说法重试`)
+}
+
+
+/** 执行已确认的操作（写库 + 历史，可撤销）。 */
 export function aiExecute(action: AiAction): { reply: string } {
   const data = action.data ?? {}
   switch (action.type) {
     case 'add_item': {
       const name = String(data.name ?? '').trim()
       if (!name) throw new Error('物品名称不能为空')
-      const containerId = Number(data.container_id ?? state.containers[0]?.id ?? 0)
-      const container = requireContainer(containerId)
+      const container = requireContainer(Number(data.container_id))
       const item = {
         id: nextId(), container_id: container.id, owner_id: container.owner_id, name,
         quantity: data.quantity == null ? null : Number(data.quantity),
@@ -193,11 +282,11 @@ export async function aiTest(): Promise<string> {
   try {
     const res = await gatewayRequest('/models', { method: 'GET' })
     if (res.status === 401 || res.status === 403) return '✗ 网关可达，但密钥无效或未填写'
-    if (res.status < 200 || res.status >= 300) return '✗ 网关返回 HTTP ' + res.status
+    if (res.status < 200 || res.status >= 300) return `✗ 网关返回 HTTP ${res.status}`
     const models = (res.data as Record<string, unknown>)?.data
     const count = Array.isArray(models) ? models.length : 0
-    return count ? '✓ 网关可达，' + count + ' 个模型可用' : '✓ 网关可达'
+    return count ? `✓ 网关可达，${count} 个模型可用` : '✓ 网关可达'
   } catch (error) {
-    return '✗ ' + ((error as Error).message || '连接失败')
+    return `✗ ${(error as Error).message || '连接失败'}`
   }
 }
