@@ -237,7 +237,7 @@ defineExpose({ sendChat })
         v-model="actionText"
         type="text"
         :disabled="planning || busy"
-        placeholder="整理指令，如：把手办放到铭瑄B760M主板箱子"
+        placeholder="输入整理指令…"
         @keydown.enter.prevent="planAndConfirm"
       />
       <button class="primary-btn" :disabled="planning || busy || !actionText.trim()" @click="planAndConfirm">

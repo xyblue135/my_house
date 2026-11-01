@@ -2872,3 +2872,20 @@ button.online-status > span {
   opacity: 0;
   transform: translateY(-4px);
 }
+
+/* ---- AI 整理指令行：输入可横向滚动，长指令/长占位不截断 ---- */
+.plan-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.plan-row input {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.ai-inline-results .bubble {
+  overflow-wrap: anywhere;
+}
