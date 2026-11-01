@@ -17,25 +17,30 @@ const modals = useItemModals()
 const { refreshData } = useAppBootstrap()
 const { toast } = useToast()
 const openContainerId = ref<number | null>(null)
-const activeGroupId = ref<number | 'all' | 'ungrouped'>('all')
+// 分组显示过滤：勾选面板控制哪些分组显示（默认全显示）
+const hiddenGroups = ref<Set<string>>(new Set())
+const groupPanelOpen = ref(false)
+const panelGroupName = ref('')
+const panelSaving = ref(false)
+function toggleGroupFilter(key: string): void {
+  const next = new Set(hiddenGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  hiddenGroups.value = next
+}
+function groupVisible(c: { group_id?: number | null }): boolean {
+  return c.group_id == null ? !hiddenGroups.value.has('ungrouped') : !hiddenGroups.value.has(String(c.group_id))
+}
 const query = ref('')
+const planText = ref('')
 const aiEnabled = ref(false)
 const aiBusy = ref(false)
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
-// AI 整理：把搜索框里的指令交给 AI（多重校验 + 确认卡）；普通关键词结果输入时已实时显示
-function submitAiPlan() {
-  const value = query.value.trim()
-  if (!value || aiBusy.value) return
-  void aiPanel.value?.planAndConfirm(value)
-}
 // 房间概念已下线：AI 始终在全库范围查找
 const allOwnerIds = computed(() => store.members.map((member) => member.id))
 const searchResults = ref<Item[]>([])
 const searching = ref(false)
 const searchError = ref('')
-const groupModal = ref(false)
-const groupName = ref('')
-const savingGroup = ref(false)
 const editingSort = ref(false)
 const sortList = ref<Container[]>([])
 const dragIndex = ref<number | null>(null)
@@ -46,13 +51,7 @@ const myGroups = computed(() => store.groups)
 const ungroupedCount = computed(() => allContainers.value.filter((c) => c.group_id == null).length)
 const totalItems = computed(() => allContainers.value.reduce((sum, c) => sum + c.item_count, 0))
 const filteredContainers = computed(() =>
-  allContainers.value.filter(
-    (c) =>
-      activeGroupId.value === 'all' ||
-      (activeGroupId.value === 'ungrouped'
-        ? c.group_id == null
-        : c.group_id === activeGroupId.value),
-  ),
+  allContainers.value.filter((c) => groupVisible(c)),
 )
 const displayContainers = computed(() => {
   if (editingSort.value) return sortList.value
@@ -77,42 +76,10 @@ const scopedResults = computed(() =>
     return !container || containerInScope(container)
   }),
 )
-const activeGroup = computed(() => myGroups.value.find((g) => g.id === activeGroupId.value))
-
-// ---- 排序三模式：最近打开 → 名称 → 数量，点击循环 ----
-type SortMode = 'recent' | 'name' | 'count'
-const SORT_KEY = 'myhouse.containerSort'
-const SORT_LABEL: Record<SortMode, string> = { recent: '最近打开', name: '名称', count: '数量' }
-const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'recent')
-const sortModeLabel = computed(() => `排序：${SORT_LABEL[sortMode.value]}`)
-function cycleSortMode() {
-  const order: SortMode[] = ['recent', 'name', 'count']
-  sortMode.value = order[(order.indexOf(sortMode.value) + 1) % order.length]
-  localStorage.setItem(SORT_KEY, sortMode.value)
-}
 function groupCount(groupId: number): number {
   return allContainers.value.filter((c) => c.group_id === groupId).length
 }
-
-// ---- 收纳空间默认折叠（记住用户的手动展开/收起） ----
-const storageOpen = ref(localStorage.getItem('myhouse.storageOpen') === '1')
-function onStorageToggle(event: Event): void {
-  const open = (event.target as HTMLDetailsElement).open
-  storageOpen.value = open
-  localStorage.setItem('myhouse.storageOpen', open ? '1' : '0')
-}
-const groupRow = ref<HTMLElement | null>(null)
-function scrollGroups(dir: number) {
-  groupRow.value?.scrollBy({ left: dir * 240, behavior: 'smooth' })
-}
-function touchContainer(id: number): void {
-  void api(`/api/containers/${id}/opened`, { method: 'POST', body: JSON.stringify({}) })
-}
-function openContainer(id: number): void {
-  touchContainer(id)
-  openContainerId.value = id
-}
-watch(activeGroupId, cancelSort)
+watch(hiddenGroups, cancelSort)
 watch(query, cancelSort)
 
 // Query the server, so search also finds items beyond the initial inventory page.
@@ -146,6 +113,12 @@ function submitSearch(event?: Event) {
   if (event instanceof KeyboardEvent && event.isComposing) return
   if (aiEnabled.value && !aiBusy.value) void aiPanel.value?.sendChat(query.value)
 }
+function submitPlan() {
+  const value = planText.value.trim()
+  if (!value || aiBusy.value) return
+  void aiPanel.value?.planAndConfirm(value)
+  planText.value = ''
+}
 function useSuggestion(text: string) {
   query.value = text
   submitSearch()
@@ -161,45 +134,37 @@ function speakResults() {
 }
 
 function openAddContainer() {
-  modals.openAddContainer(typeof activeGroupId.value === 'number' ? activeGroupId.value : null)
+  modals.openAddContainer(null)
 }
-function openAddItem() {
-  if (!allContainers.value.length) {
-    openAddContainer()
-    toast('先创建一个箱子，再放入物品')
-    return
+async function deleteGroup(g: { id: number; name: string }) {
+  if (!g || !window.confirm('删除分组「' + g.name + '」？箱子会保留并回到未分组。')) return
+  try {
+    await api('/api/groups/' + g.id, { method: 'DELETE' })
+    const next = new Set(hiddenGroups.value)
+    next.delete(String(g.id))
+    hiddenGroups.value = next
+    await refreshData()
+    toast('分组已删除')
+  } catch (error) {
+    toast((error as Error).message)
   }
-  modals.openAddItem(allContainers.value[0].id)
 }
-async function addGroup() {
-  const name = groupName.value.trim()
-  if (!name || savingGroup.value) return
-  savingGroup.value = true
+async function addGroupFromPanel() {
+  const name = panelGroupName.value.trim()
+  if (!name || panelSaving.value) return
+  panelSaving.value = true
   try {
     await api('/api/groups', {
       method: 'POST',
       body: JSON.stringify({ owner_id: store.members[0]?.id ?? 1, name }),
     })
     await refreshData()
-    groupName.value = ''
-    groupModal.value = false
+    panelGroupName.value = ''
     toast('分组已新建')
   } catch (error) {
     toast((error as Error).message)
   } finally {
-    savingGroup.value = false
-  }
-}
-async function deleteGroup() {
-  const g = activeGroup.value
-  if (!g || !window.confirm('删除分组「' + g.name + '」？箱子会保留并回到未分组。')) return
-  try {
-    await api('/api/groups/' + g.id, { method: 'DELETE' })
-    activeGroupId.value = 'all'
-    await refreshData()
-    toast('分组已删除')
-  } catch (error) {
-    toast((error as Error).message)
+    panelSaving.value = false
   }
 }
 function enterSortMode() {
@@ -270,11 +235,41 @@ async function saveSort() {
 }
 onDeactivated(() => {
   openContainerId.value = null
-  groupModal.value = false
 })
 onBeforeUnmount(() => {
   openContainerId.value = null
 })
+
+// ---- 排序三模式：最近打开 → 名称 → 数量，点击循环 ----
+type SortMode = 'recent' | 'name' | 'count'
+const SORT_KEY = 'myhouse.containerSort'
+const SORT_LABEL: Record<SortMode, string> = { recent: '最近打开', name: '名称', count: '数量' }
+const sortMode = ref<SortMode>((localStorage.getItem(SORT_KEY) as SortMode) || 'recent')
+const sortModeLabel = computed(() => `排序：${SORT_LABEL[sortMode.value]}`)
+function cycleSortMode() {
+  const order: SortMode[] = ['recent', 'name', 'count']
+  sortMode.value = order[(order.indexOf(sortMode.value) + 1) % order.length]
+  localStorage.setItem(SORT_KEY, sortMode.value)
+}
+
+// ---- 收纳空间默认折叠（记住用户的手动展开/收起） ----
+const storageOpen = ref(localStorage.getItem('myhouse.storageOpen') === '1')
+function onStorageToggle(event: Event): void {
+  const open = (event.target as HTMLDetailsElement).open
+  storageOpen.value = open
+  localStorage.setItem('myhouse.storageOpen', open ? '1' : '0')
+}
+const groupRow = ref<HTMLElement | null>(null)
+function scrollGroups(dir: number) {
+  groupRow.value?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+}
+function touchContainer(id: number): void {
+  void api(`/api/containers/${id}/opened`, { method: 'POST', body: JSON.stringify({}) })
+}
+function openContainer(id: number): void {
+  touchContainer(id)
+  openContainerId.value = id
+}
 </script>
 
 <template>
@@ -348,32 +343,87 @@ onBeforeUnmount(() => {
           <rect class="hs-sparkle hs-d2" x="318" y="88" width="7" height="7" rx="2" fill="#f4c95d" opacity="0.5" />
         </g>
       </svg>
-      <div class="hero-stats">
-        <AppIcon name="box" :size="18" />
-        <span>目前收纳 <b>{{ allContainers.length }}</b> 个箱子，<b>{{ totalItems }}</b> 种物品。</span>
-        <AppIcon class="chev" name="right" :size="15" />
+      <div class="hero-top">
+        <div class="hero-stats">
+          <AppIcon name="box" :size="18" />
+          <span>目前收纳 <b>{{ allContainers.length }}</b> 个箱子，<b>{{ totalItems }}</b> 种物品。</span>
+          <AppIcon class="chev" name="right" :size="15" />
+        </div>
+        <button class="group-btn" type="button" @click.stop="groupPanelOpen = !groupPanelOpen">
+          <AppIcon name="grid" :size="15" />分组
+        </button>
+      </div>
+      <div v-if="groupPanelOpen" class="group-panel" @click.stop>
+        <p class="group-panel-title">显示的分组</p>
+        <label class="group-check">
+          <input
+            type="checkbox"
+            :checked="!hiddenGroups.has('ungrouped')"
+            @change="toggleGroupFilter('ungrouped')"
+          />
+          <span class="group-check-name">未分组</span>
+          <span class="group-check-count">{{ ungroupedCount }}</span>
+        </label>
+        <label v-for="g in myGroups" :key="g.id" class="group-check">
+          <input
+            type="checkbox"
+            :checked="!hiddenGroups.has(String(g.id))"
+            @change="toggleGroupFilter(String(g.id))"
+          />
+          <span class="group-check-name">{{ g.name }}</span>
+          <span class="group-check-count">{{ groupCount(g.id) }}</span>
+          <button
+            class="icon-btn plain danger group-del"
+            :aria-label="'删除分组「' + g.name + '」'"
+            @click.stop="deleteGroup(g)"
+          >
+            <AppIcon name="trash" :size="14" />
+          </button>
+        </label>
+        <div class="group-add-row">
+          <input v-model="panelGroupName" placeholder="新分组名称" @keydown.enter.prevent="addGroupFromPanel" />
+          <button class="outline-btn compact" :disabled="panelSaving || !panelGroupName.trim()" @click="addGroupFromPanel">
+            {{ panelSaving ? '添加中…' : '添加分组' }}
+          </button>
+        </div>
       </div>
     </div>
 
     <div class="inventory-tools">
       <form class="inventory-search" role="search" @submit.prevent="submitSearch()">
-      <div class="search-box" :class="{ 'ai-search-active': aiEnabled }">
-        <AppIcon :name="aiEnabled ? 'sparkles' : 'search'" :size="21" />
-        <input
-          v-model="query"
-          type="search"
-          :maxlength="aiEnabled ? 2000 : 200"
-          :placeholder="aiEnabled ? '找物品，或说说想怎么整理…' : '找物品、箱子…'"
-          aria-label="搜索物品或箱子"
-          @keydown.enter.prevent="submitSearch($event)"
-        />
-        <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
-          <AppIcon name="close" :size="18" />
-        </button>
-        <button class="search-go" type="button" :disabled="aiBusy || !query.trim()" @click="submitAiPlan">
-          <AppIcon name="sparkles" :size="16" /><span>AI 整理</span>
-        </button>
-      </div>
+        <div class="search-box" :class="{ 'ai-search-active': aiEnabled }">
+          <AppIcon :name="aiEnabled ? 'sparkles' : 'search'" :size="21" />
+          <input
+            v-model="query"
+            type="search"
+            :maxlength="aiEnabled ? 2000 : 200"
+            :placeholder="aiEnabled ? '找物品，或说说想怎么整理…' : '找物品、箱子…'"
+            aria-label="搜索物品或箱子"
+            @keydown.enter.prevent="submitSearch($event)"
+          />
+          <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
+            <AppIcon name="close" :size="18" />
+          </button>
+          <button class="search-go" type="submit" :disabled="aiBusy || !query.trim()" @click="submitSearch">
+            <AppIcon name="search" :size="16" /><span>查找</span>
+          </button>
+        </div>
+      </form>
+      <form class="inventory-search" role="search" @submit.prevent="submitPlan()">
+        <div class="search-box plan-box">
+          <AppIcon name="sparkles" :size="21" />
+          <input
+            v-model="planText"
+            type="text"
+            :maxlength="2000"
+            :disabled="aiBusy"
+            placeholder="整理指令，如：把手办放到哪个箱子"
+            aria-label="AI 整理指令"
+          />
+          <button class="search-go plan-go" type="submit" :disabled="aiBusy || !planText.trim()">
+            <AppIcon name="sparkles" :size="16" /><span>AI 整理</span>
+          </button>
+        </div>
       </form>
     </div>
 
@@ -444,7 +494,6 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-
       <details
         class="storage-fold"
         :open="storageOpen"
@@ -452,8 +501,7 @@ onBeforeUnmount(() => {
       >
         <summary>
           <span class="fold-title">
-            {{ activeGroup?.name || (activeGroupId === 'ungrouped' ? '未分组' : '收纳空间')
-            }}<span class="count-label">{{ displayContainers.length }}</span>
+            收纳空间<span class="count-label">{{ displayContainers.length }}</span>
           </span>
           <span class="inline-actions" @click.stop.prevent>
             <template v-if="editingSort"
@@ -463,13 +511,6 @@ onBeforeUnmount(() => {
               </button></template
             >
             <template v-else
-              ><button
-                v-if="activeGroup"
-                class="icon-btn plain danger"
-                aria-label="删除当前分组"
-                @click="deleteGroup"
-              >
-                <AppIcon name="trash" :size="18" /></button
               ><button class="outline-btn compact" @click="openAddContainer">新建箱子</button
               ><button
                 v-if="displayContainers.length > 1"
@@ -539,91 +580,18 @@ onBeforeUnmount(() => {
           </div>
         </article>
       </div>
-      <div v-else class="empty">
+      <p v-if="displayContainers.length" class="list-end">收好的是物品，也是日常。</p>
+        </div>
+      </details>
+      <div v-if="!displayContainers.length" class="empty">
         <AppIcon name="box" :size="40" />
         <h3>给物品安个家</h3>
-        <p>
-          {{ activeGroupId === 'all' ? '从一个抽屉、一个收纳箱开始。' : '这个分组暂时没有箱子。' }}
-        </p>
+        <p>从一个抽屉、一个收纳箱开始。</p>
         <button class="primary-btn" @click="openAddContainer">
           <AppIcon name="plus" />新建箱子
         </button>
       </div>
-      <p v-if="displayContainers.length" class="list-end">收好的是物品，也是日常。</p>
-        </div>
-      </details>
-      <div class="group-tabs" aria-label="按分组筛选">
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向左滚动分组"
-          @click="scrollGroups(-1)"
-        >‹</button>
-        <div ref="groupRow" class="group-tabs-groups">
-          <button
-            class="group-tab special"
-            :class="{ active: activeGroupId === 'ungrouped' }"
-            :aria-pressed="activeGroupId === 'ungrouped'"
-            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
-          >
-            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
-          </button>
-          <button
-            v-for="group in myGroups"
-            :key="group.id"
-            class="group-tab"
-            :class="{ active: activeGroupId === group.id }"
-            :aria-pressed="activeGroupId === group.id"
-            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
-          >
-            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
-          </button>
-          <button class="group-add" @click="groupModal = true">
-            <AppIcon name="plus" :size="16" />分组
-          </button>
-        </div>
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向右滚动分组"
-          @click="scrollGroups(1)"
-        >›</button>
-      </div>
     </template>
   </section>
   <ContainerDetailModal :container-id="openContainerId" @close="openContainerId = null" />
-  <div
-    v-if="groupModal"
-    v-dialog="() => (groupModal = false)"
-    class="modal-backdrop"
-    aria-label="新建分组"
-    @click.self="groupModal = false"
-  >
-    <section class="modal small">
-      <div class="modal-head">
-        <div>
-          <p class="eyebrow">整理空间</p>
-          <h2>新建分组</h2>
-        </div>
-        <button class="icon-btn plain" aria-label="关闭分组表单" @click="groupModal = false">
-          <AppIcon name="close" />
-        </button>
-      </div>
-      <form class="modal-form one-col" @submit.prevent="addGroup">
-        <label
-          >分组名称<input
-            v-model="groupName"
-            required
-            maxlength="80"
-            placeholder="如：客厅、厨房、书房"
-        /></label>
-        <div class="modal-actions">
-          <button type="button" class="outline-btn" @click="groupModal = false">取消</button
-          ><button class="primary-btn" :disabled="savingGroup">
-            {{ savingGroup ? '保存中…' : '创建分组' }}
-          </button>
-        </div>
-      </form>
-    </section>
-  </div>
 </template>
