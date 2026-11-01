@@ -87,6 +87,14 @@
 - **封面裁剪**：拖动选区自由裁剪，输出自动限最长边 1600px；照片自动纠正方向、压缩体积
 - **换了手机**：新手机初始化页填同一仓库令牌 → 从云端导入即可
 
+## 下载与自动构建（CI/CD）
+
+仓库配置了 GitHub Actions（`.github/workflows/apk.yml`）：每次推送到 master 或手动触发，都会自动**测试 + 构建 APK**，产物上传到 Actions 的 Artifacts（名称 `my-house-apk`）。
+
+获取方式：仓库页面 → **Actions** → 选最新的 "Build APK" 运行 → Artifacts 下载 `my-house-apk`。CI 只产出 APK，**不包含任何密钥或用户数据**。
+
+> 仓库里出现的 `my_house_data` 备份仓库地址、`192.168.3.100:31415` AI 网关地址均为**示例参考**，请替换为你自己的仓库与网关。全仓库不含任何令牌、密钥（CI 有扫描）。
+
 ## 构建（开发者）
 
 需要 Node.js 20+、pnpm、JDK 21、Android SDK 36。
