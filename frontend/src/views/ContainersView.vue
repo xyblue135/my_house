@@ -483,43 +483,7 @@ onBeforeUnmount(() => {
           <AppIcon class="fold-chev" name="down" :size="18" />
         </summary>
         <div class="fold-body">
-      <div class="group-tabs" aria-label="按分组筛选">
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向左滚动分组"
-          @click="scrollGroups(-1)"
-        >‹</button>
-        <div ref="groupRow" class="group-tabs-groups">
-          <button
-            class="group-tab special"
-            :class="{ active: activeGroupId === 'ungrouped' }"
-            :aria-pressed="activeGroupId === 'ungrouped'"
-            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
-          >
-            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
-          </button>
-          <button
-            v-for="group in myGroups"
-            :key="group.id"
-            class="group-tab"
-            :class="{ active: activeGroupId === group.id }"
-            :aria-pressed="activeGroupId === group.id"
-            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
-          >
-            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
-          </button>
-          <button class="group-add" @click="groupModal = true">
-            <AppIcon name="plus" :size="16" />分组
-          </button>
-        </div>
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向右滚动分组"
-          @click="scrollGroups(1)"
-        >›</button>
-      </div>
+
       <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>
       <div v-if="displayContainers.length" class="container-rows">
         <article
@@ -588,6 +552,43 @@ onBeforeUnmount(() => {
       <p v-if="displayContainers.length" class="list-end">收好的是物品，也是日常。</p>
         </div>
       </details>
+      <div class="group-tabs" aria-label="按分组筛选">
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向左滚动分组"
+          @click="scrollGroups(-1)"
+        >‹</button>
+        <div ref="groupRow" class="group-tabs-groups">
+          <button
+            class="group-tab special"
+            :class="{ active: activeGroupId === 'ungrouped' }"
+            :aria-pressed="activeGroupId === 'ungrouped'"
+            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
+          >
+            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
+          </button>
+          <button
+            v-for="group in myGroups"
+            :key="group.id"
+            class="group-tab"
+            :class="{ active: activeGroupId === group.id }"
+            :aria-pressed="activeGroupId === group.id"
+            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
+          >
+            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
+          </button>
+          <button class="group-add" @click="groupModal = true">
+            <AppIcon name="plus" :size="16" />分组
+          </button>
+        </div>
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向右滚动分组"
+          @click="scrollGroups(1)"
+        >›</button>
+      </div>
     </template>
   </section>
   <ContainerDetailModal :container-id="openContainerId" @close="openContainerId = null" />
