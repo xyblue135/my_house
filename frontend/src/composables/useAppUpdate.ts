@@ -55,25 +55,32 @@ export function isNewerVersion(a: string, b: string): boolean {
   return false
 }
 
-async function fetchLatest(): Promise<{ tag: string; notes: string; apkUrl: string | null; htmlUrl: string }> {
+async function fetchLatestOnce(): Promise<{ tag: string; notes: string; apkUrl: string | null; htmlUrl: string; status: number }> {
   const { owner, repo } = parseRepo(updateRepo.value)
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
     headers: { Accept: 'application/vnd.github+json' },
   })
-  if (res.status === 404) throw new Error('该仓库还没有发布过版本')
-  if (res.status === 403 || res.status === 429) throw new Error('请求过于频繁或仓库不可读，稍后再试')
-  if (!res.ok) throw new Error(`查询失败：HTTP ${res.status}`)
-  const data = (await res.json()) as {
-    tag_name: string; body?: string; html_url: string
-    assets?: { name: string; browser_download_url: string }[]
-  }
-  const apk = (data.assets ?? []).find((a) => a.name.endsWith('.apk'))
+  const data = res.status === 200 ? await res.json() : null
   return {
-    tag: data.tag_name,
-    notes: (data.body ?? '').slice(0, 600),
-    apkUrl: apk?.browser_download_url ?? null,
-    htmlUrl: data.html_url,
+    status: res.status,
+    tag: data?.tag_name ?? '',
+    notes: (data?.body ?? '').slice(0, 600),
+    apkUrl: (data?.assets ?? []).find((a: { name: string }) => a.name.endsWith('.apk'))?.browser_download_url ?? null,
+    htmlUrl: data?.html_url ?? `https://github.com/${owner}/${repo}/releases`,
   }
+}
+
+async function fetchLatest(): Promise<{ tag: string; notes: string; apkUrl: string | null; htmlUrl: string }> {
+  // 匿名接口限流常见（403/429）：自动等 2.5 秒重试一次
+  let last = await fetchLatestOnce()
+  if (last.status === 403 || last.status === 429) {
+    await new Promise((r) => setTimeout(r, 2500))
+    last = await fetchLatestOnce()
+  }
+  if (last.status === 404) throw new Error('该仓库还没有发布过版本')
+  if (last.status === 403 || last.status === 429) throw new Error('GitHub 接口限流，请稍后再试（移动网络下常见）')
+  if (last.status !== 200) throw new Error(`查询失败：HTTP ${last.status}`)
+  return { tag: last.tag, notes: last.notes, apkUrl: last.apkUrl, htmlUrl: last.htmlUrl }
 }
 
 export const updateInfo = ref<UpdateInfo | null>(null)
