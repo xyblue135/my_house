@@ -109,14 +109,12 @@ provideItemModals(modals)
             aria-label="查看数据与同步信息"
             @click.stop="showSyncInfo = !showSyncInfo"
           >
-            <span class="light" title="本机数据"></span
-            ><span class="light" :class="'is-' + lights.cloud" title="云端同步"></span
+            <span class="light" :class="'is-' + lights.cloud" title="云端同步"></span
             ><span class="light" :class="'is-' + lights.ai" title="AI 接口"></span>
             本机数据
           </button>
           <div v-if="showSyncInfo" class="sync-info-pop" @click.stop>
             <p class="sync-info-title">状态灯</p>
-            <p class="sync-info-row"><span><span class="light" ></span> 本机数据</span><b>正常</b></p>
             <p class="sync-info-row"><span><span class="light" :class="'is-' + lights.cloud"></span> 云端同步</span><b>{{ LIGHT_LABEL[lights.cloud] }}</b></p>
             <p class="sync-info-row"><span><span class="light" :class="'is-' + lights.ai"></span> AI 接口</span><b>{{ LIGHT_LABEL[lights.ai] }}</b></p>
             <p class="sync-info-title" style="margin-top: 12px">数据与同步</p>

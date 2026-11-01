@@ -5,7 +5,6 @@ import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
 import { containerInScope, scopeLabel } from '../composables/useSearchScope'
-import { useVoiceInput } from '../composables/useVoiceInput'
 import { speak } from '../composables/useSpeech'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
@@ -23,17 +22,13 @@ const query = ref('')
 const aiEnabled = ref(false)
 const aiBusy = ref(false)
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
-// 语音输入只在安卓 App 里显示（原生语音识别），网页端隐藏
-const voice = useVoiceInput()
-function onVoice() {
-  void voice.toggle({
-    partial: (text) => { query.value = text },
-    final: (text) => {
-      query.value = text
-      if (text.trim()) submitSearch()
-    },
-    error: (message) => toast(message),
-  })
+// AI 整理：第二行输入（与查找分离），走面板的多重校验与确认卡
+const planText = ref('')
+function submitPlan() {
+  const value = planText.value.trim()
+  if (!value || aiBusy.value) return
+  void aiPanel.value?.planAndConfirm(value)
+  planText.value = ''
 }
 // 房间概念已下线：AI 始终在全库范围查找
 const allOwnerIds = computed(() => store.members.map((member) => member.id))
@@ -374,16 +369,6 @@ onBeforeUnmount(() => {
           aria-label="搜索物品或箱子"
           @keydown.enter.prevent="submitSearch($event)"
         />
-        <button
-          v-if="voice.supported"
-          type="button"
-          class="icon-btn plain mic-btn"
-          :class="{ listening: voice.listening.value }"
-          :aria-label="voice.listening.value ? '停止语音输入' : '语音输入'"
-          @click.prevent="onVoice"
-        >
-          <AppIcon name="mic" :size="19" />
-        </button>
         <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
           <AppIcon name="close" :size="18" />
         </button>
@@ -391,11 +376,23 @@ onBeforeUnmount(() => {
           <AppIcon name="search" :size="16" /><span>查找</span>
         </button>
       </div>
-      <label class="ai-search-toggle" :class="{ active: aiEnabled }">
-        <input v-model="aiEnabled" type="checkbox" role="switch" :disabled="aiBusy" />
-        <span class="toggle-track" aria-hidden="true"></span>
-        <span>AI</span>
-      </label>
+      </form>
+      <form class="inventory-search" role="search" @submit.prevent="submitPlan()">
+        <div class="search-box">
+          <AppIcon name="sparkles" :size="21" />
+          <input
+            v-model="planText"
+            type="text"
+            :maxlength="2000"
+            :disabled="aiBusy"
+            placeholder="整理指令，如：把手办放到哪个箱子"
+            aria-label="AI 整理指令"
+            @keydown.enter.prevent="submitPlan()"
+          />
+          <button class="search-go" type="submit" :disabled="aiBusy || !planText.trim()">
+            <AppIcon name="sparkles" :size="16" /><span>AI 整理</span>
+          </button>
+        </div>
       </form>
     </div>
 

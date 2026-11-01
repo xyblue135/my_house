@@ -29,11 +29,10 @@ interface ChatMessage {
 const chatMessages = ref<ChatMessage[]>([])
 const chatBusy = ref(false)
 const executing = ref(false)
-const busy = computed(() => chatBusy.value || executing.value)
+const busy = computed(() => chatBusy.value || executing.value || planning.value)
 const chatList = ref<HTMLElement | null>(null)
 const chatSuggestions = ['耳机', '哪些物品状态不正常？', '我有哪些箱子？']
 // AI 整理：与查找分离的写操作入口（格式校验 → 自动重试 → 用户确认卡）
-const actionText = ref('')
 const planning = ref(false)
 
 function editOf(message: ChatMessage) {
@@ -52,8 +51,8 @@ function editOf(message: ChatMessage) {
   return message.edit
 }
 
-async function planAndConfirm() {
-  const value = actionText.value.trim()
+async function planAndConfirm(text?: string) {
+  const value = (text ?? '').trim()
   if (!value || planning.value || busy.value) return
   const ownerIds = [...props.ownerIds]
   const scopeLabel = props.scopeLabel
@@ -71,7 +70,6 @@ async function planAndConfirm() {
     }
     if (plan.action) editOf(message)
     chatMessages.value.push(message)
-    actionText.value = ''
   } catch (error) {
     chatMessages.value.push({ id: messageId++, role: 'assistant', text: `解析失败：${(error as Error).message}`, ownerIds, scopeLabel })
   } finally {
@@ -134,11 +132,11 @@ async function executeAction(message: ChatMessage) {
   message.executing = true
   executing.value = true
   try {
-    const result = await api<{ message: string }>('/api/ai/execute', {
+    const result = await api<{ reply?: string; message?: string }>('/api/ai/execute', {
       method: 'POST',
       body: JSON.stringify({ action, owner_ids: message.ownerIds }),
     })
-    message.text += '\n\n' + result.message
+    message.text += '\n\n' + (result.reply ?? result.message ?? '已执行。')
     message.executed = true
     await refreshData()
   } catch (error) {
@@ -190,7 +188,7 @@ function scrollChat() {
   if (chatList.value) chatList.value.scrollTop = chatList.value.scrollHeight
 }
 
-defineExpose({ sendChat })
+defineExpose({ sendChat, planAndConfirm })
 </script>
 
 <template>
@@ -199,7 +197,7 @@ defineExpose({ sendChat })
       <div class="ai-avatar"><AppIcon name="sparkles" /></div>
       <div>
         <h3>AI 查找</h3>
-        <p>查找用上方搜索框（只读）；要 AI 执行整理，在下方输入指令，确认后才会生效。</p>
+        <p>查找用上方搜索框（只读）；整理指令在搜索框下方一栏，确认后才会生效。</p>
       </div>
       <button v-if="chatMessages.length" class="text-btn" :disabled="busy" @click="reset">清空</button>
     </div>
@@ -231,18 +229,6 @@ defineExpose({ sendChat })
     </div>
     <div v-else class="suggestions">
       <button v-for="suggestion in chatSuggestions" :key="suggestion" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
-    </div>
-    <div class="plan-row">
-      <input
-        v-model="actionText"
-        type="text"
-        :disabled="planning || busy"
-        placeholder="输入整理指令…"
-        @keydown.enter.prevent="planAndConfirm"
-      />
-      <button class="primary-btn" :disabled="planning || busy || !actionText.trim()" @click="planAndConfirm">
-        {{ planning ? '解析中…' : 'AI 整理' }}
-      </button>
     </div>
   </section>
 </template>
