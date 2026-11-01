@@ -9,6 +9,7 @@ import { searchScope, setSearchScope } from '../composables/useSearchScope'
 import {
   providers, saveProviders, verifyProvider, pushToCloud, pullFromCloud, type ProviderConfig, type CloudProviders,
 } from '../local/sync'
+import { snapshotExists, snapshotTime, restoreSnapshot } from '../local/storage'
 import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
   setTtsEnabled, setTtsCustomOn, setTtsCustomUrl, setTtsCustomKey, speak,
@@ -101,7 +102,9 @@ async function pushSlot(slot: SlotKey) {
   syncSlots[slot].busy = true
   syncSlots[slot].message = ''
   try {
-    syncSlots[slot].message = await pushToCloud(slot, (text) => { syncSlots[slot].message = text })
+    syncSlots[slot].message = await pushToCloud(slot, (text) => { syncSlots[slot].message = text }, {
+      confirmNewRepo: (message) => window.confirm(message),
+    })
     toast(syncSlots[slot].message)
   } catch (error) {
     syncSlots[slot].message = '✗ ' + (error as Error).message
@@ -110,11 +113,13 @@ async function pushSlot(slot: SlotKey) {
 }
 async function pullSlot(slot: SlotKey) {
   updateProvider(slot, 'url', providers[slot].url)
-  if (!window.confirm('拉取会用云端数据整体替换本机数据（先推送一次再拉取可防丢失）。继续？')) return
+  if (!window.confirm('拉取会用云端数据整体替换本机数据（先推送一次再拉取可防丢失，拉取前自动保留本机快照）。继续？')) return
   syncSlots[slot].busy = true
   syncSlots[slot].message = ''
   try {
-    syncSlots[slot].message = await pullFromCloud(slot, (text) => { syncSlots[slot].message = text })
+    syncSlots[slot].message = await pullFromCloud(slot, (text) => { syncSlots[slot].message = text }, {
+      confirmCrossRepo: (message) => window.confirm(message),
+    })
     toast(syncSlots[slot].message)
     await refreshData()
   } catch (error) {
@@ -122,6 +127,11 @@ async function pullSlot(slot: SlotKey) {
     toast((error as Error).message)
   } finally { syncSlots[slot].busy = false }
 }
+function restoreSnapshotClick() {
+  if (!window.confirm('恢复快照会把本机数据替换为「最近一次拉取前」的状态（当前数据与快照互换）。继续？')) return
+  void restoreSnapshot().then(() => location.reload()).catch((error) => toast((error as Error).message))
+}
+
 // ---- 朗读 ----
 function toggleTts(event: Event) {
   setTtsEnabled((event.target as HTMLInputElement).checked)
@@ -220,6 +230,12 @@ async function testAi() {
           <button class="outline-btn" :disabled="syncSlots[slot].busy" @click="pullSlot(slot)">从云端拉取</button>
         </div>
         <p v-if="syncSlots[slot].message" class="cloud-message" role="status">{{ syncSlots[slot].message }}</p>
+      </div>
+      <div class="cloud-message snapshot-row">
+        <span>安全快照：拉取前自动保留本机数据{{ snapshotTime() ? `（${snapshotTime()}）` : '' }}</span>
+        <button class="outline-btn compact" :disabled="!snapshotExists()" @click="restoreSnapshotClick">
+          恢复快照
+        </button>
       </div>
       </div>
     </details>

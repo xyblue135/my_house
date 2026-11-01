@@ -6,6 +6,7 @@
  */
 import { CapacitorHttp } from '@capacitor/core'
 import { state, replaceState, blobAll, persistNow, type LocalState } from './state'
+import { snapshotAll } from './storage'
 
 export interface ProviderConfig {
   /** 仓库地址，如 https://github.com/xyblue135/my_house_data */
@@ -51,20 +52,58 @@ export interface ParsedRepo { apiBase: string; owner: string; repo: string; host
 
 /** 解析仓库主页 URL：github.com → api.github.com，gitee.com → gitee.com/api/v5 */
 export function parseRepoUrl(raw: string, provider: 'github' | 'gitee'): ParsedRepo {
+  const label = provider === 'github' ? 'GitHub' : 'Gitee'
   const value = raw.trim().replace(/\/$/, '')
-  if (!value) throw new Error(`${provider === 'github' ? 'GitHub' : 'Gitee'} 仓库地址未填写`)
+  if (!value) throw new Error(`${label} 仓库地址未填写`)
+  if (/\s/.test(value)) throw new Error('仓库地址不能包含空格或换行')
   let url: URL
-  try { url = new URL(value.includes('://') ? value : `https://${value}`) } catch { throw new Error('仓库地址格式不正确') }
+  try { url = new URL(value.includes('://') ? value : `https://${value}`) } catch { throw new Error('仓库地址格式不正确，例如 https://github.com/owner/repo') }
+  // 防混淆：地址里不允许内嵌账号密码（鉴权只走令牌）
+  if (url.username || url.password) throw new Error('仓库地址不要包含账号密码，鉴权请填在「令牌」里')
+  const host = url.hostname.toLowerCase()
+  // 平台防填错：官方站互斥
+  if (provider === 'github' && host === 'gitee.com') throw new Error('这是 Gitee 地址，请填到 Gitee 区域')
+  if (provider === 'gitee' && host === 'github.com') throw new Error('这是 GitHub 地址，请填到 GitHub 区域')
+  // 自建服务允许 http 局域网地址；官方站强制 https
+  const isLan = host === 'localhost' || host.endsWith('.local') || /^192\.168\./.test(host) || /^10\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  if (!isLan && url.protocol !== 'https:') throw new Error(`${label} 仓库地址必须使用 https://`)
   const seg = url.pathname.split('/').filter(Boolean)
   if (seg.length < 2) throw new Error('仓库地址需要包含所有者与仓库名，例如 https://github.com/owner/repo')
-  const host = url.hostname
+  if (seg.length > 2) throw new Error('仓库地址只填到 仓库名 为止，不要包含路径')
+  const [owner, repoRaw] = seg
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(owner)) throw new Error('仓库所有者包含不支持的字符')
+  const repo = repoRaw.replace(/\.git$/, '')
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(repo)) throw new Error('仓库名包含不支持的字符')
   let apiBase: string
   if (provider === 'github') {
     apiBase = host === 'github.com' ? 'https://api.github.com' : `https://${host}/api/v1`
   } else {
     apiBase = host === 'gitee.com' ? 'https://gitee.com/api/v5' : `https://${host}/api/v5`
   }
-  return { apiBase: apiBase.replace(/\/$/, ''), owner: seg[0], repo: seg[1].replace(/\.git$/, ''), host }
+  return { apiBase: apiBase.replace(/\/$/, ''), owner, repo, host }
+}
+
+// ---- 仓库绑定：防止换仓库后误拉取/误推送导致数据被覆盖 ----
+const BIND_KEY = 'myhouse.repoBindings'
+
+function loadBindings(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(BIND_KEY) || '{}') } catch { return {} }
+}
+
+/** 仓库唯一指纹：provider + host + owner + repo（小写） */
+export function repoFingerprint(provider: 'github' | 'gitee', cfg: ProviderConfig): string {
+  const r = parseRepoUrl(cfg.url, provider)
+  return `${provider}:${r.host}/${r.owner.toLowerCase()}/${r.repo.toLowerCase()}`
+}
+
+export function getRepoBinding(provider: 'github' | 'gitee'): string | null {
+  return loadBindings()[provider] ?? null
+}
+
+export function setRepoBinding(provider: 'github' | 'gitee', fingerprint: string): void {
+  const b = loadBindings()
+  b[provider] = fingerprint
+  try { localStorage.setItem(BIND_KEY, JSON.stringify(b)) } catch { /* 仅本次会话生效 */ }
 }
 
 function repoUrl(cfg: ProviderConfig, provider: 'github' | 'gitee', sub: string): string {
@@ -153,9 +192,22 @@ interface SyncManifest {
 }
 
 /** 推送：data.json + meta.json + 变更过的附件，单次提交。 */
-export async function pushToCloud(provider: 'github' | 'gitee', onProgress: (text: string) => void): Promise<string> {
+export async function pushToCloud(provider: 'github' | 'gitee', onProgress: (text: string) => void,
+    guard: { confirmNewRepo?: (message: string) => boolean } = {}): Promise<string> {
   const cfg = providers[provider]
   if (!cfg.url || !cfg.token) throw new Error(`${provider === 'github' ? 'GitHub' : 'Gitee'} 的地址或令牌未配置`)
+  // 仓库绑定防护：向与上次不同的仓库推送时需明确确认（防误选仓库把家庭数据传错地方）
+  const fp = repoFingerprint(provider, cfg)
+  const bound = getRepoBinding(provider)
+  if (bound && bound !== fp) {
+    const msg = `该仓库与上次同步的仓库不一致！
+
+上次：${bound}
+本次：${fp}
+
+确定要把本机全部数据（含照片）上传到这个新仓库吗？`
+    if (!guard.confirmNewRepo?.(msg)) throw new Error('已取消：仓库与上次不一致')
+  }
   await persistNow()
   onProgress('正在整理数据…')
   const safe: LocalState = JSON.parse(JSON.stringify(state))
@@ -220,13 +272,15 @@ export async function pushToCloud(provider: 'github' | 'gitee', onProgress: (tex
     await requireOk(await request(provider, cfg, 'PATCH', `/git/refs/heads/${cfg.branch}`,
       { jsonBody: { sha: String(commit.sha), force: false } }), '更新分支')
   }
+  setRepoBinding(provider, fp)
   localStorage.setItem(`${LAST_SYNC_KEY}.${provider}.manifest`, JSON.stringify({ attachments: attHashes }))
   markSynced('push')
   return `${provider === 'github' ? 'GitHub' : 'Gitee'} 推送完成（${manifest.items} 物品 / ${manifest.containers} 箱子 / ${blobs.length} 附件）`
 }
 
 /** 拉取：用云端 data.json 与附件整体替换本地（调用前须让用户确认）。 */
-export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (text: string) => void): Promise<string> {
+export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (text: string) => void,
+    guard: { confirmCrossRepo?: (message: string) => boolean } = {}): Promise<string> {
   const cfg = providers[provider]
   if (!cfg.url || !cfg.token) throw new Error(`${provider === 'github' ? 'GitHub' : 'Gitee'} 的地址或令牌未配置`)
   onProgress('正在读取云端目录…')
@@ -242,6 +296,22 @@ export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (t
   const jsonBlob = await requireOk(await request(provider, cfg, 'GET', `/git/blobs/${jsonEntry.sha}`), '下载数据')
   const incoming = JSON.parse(new TextDecoder().decode(base64ToBytes(String(jsonBlob.content ?? '')))) as LocalState
 
+  const fp = repoFingerprint(provider, cfg)
+  const bound = getRepoBinding(provider)
+  if (bound && bound !== fp) {
+    const msg = `该仓库与上次同步的仓库不一致！
+
+拉取会用这个仓库的数据整体替换本机数据。
+替换前会自动在本机保留一份快照（可在设置里恢复）。
+
+确定继续吗？`
+    if (!guard.confirmCrossRepo?.(msg)) throw new Error('已取消：仓库与上次不一致')
+  }
+
+  // 拉取前自动快照：误拉取可从 设置 → 恢复快照 找回
+  onProgress('正在为本机数据建立安全快照…')
+  await snapshotAll()
+
   const attEntries = entries.filter((e) => e.path.startsWith('attachments/') && e.type === 'blob')
   for (let i = 0; i < attEntries.length; i++) {
     onProgress(`正在下载附件 ${i + 1}/${attEntries.length}…`)
@@ -252,6 +322,7 @@ export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (t
     if (meta) await (await import('./storage')).blobPut(id, { mime: meta.mime_type, bytes: new Blob([bytes as BlobPart], { type: meta.mime_type }) })
   }
   await replaceState(incoming)
+  setRepoBinding(provider, fp)
   markSynced('pull')
   return `${provider === 'github' ? 'GitHub' : 'Gitee'} 拉取完成（${incoming.items.length} 物品 / ${incoming.containers.length} 箱子）`
 }
