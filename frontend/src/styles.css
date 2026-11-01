@@ -458,6 +458,7 @@ video {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 12px;
   margin-bottom: 14px;
 }
 .group-tabs-groups {
@@ -548,7 +549,7 @@ video {
   font-size: 13px;
 }
 .inventory-section-head {
-  margin-top: 7px;
+  margin-top: 34px;
 }
 .count-label {
   font-size: 12px;

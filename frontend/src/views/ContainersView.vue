@@ -22,13 +22,11 @@ const query = ref('')
 const aiEnabled = ref(false)
 const aiBusy = ref(false)
 const aiPanel = ref<InstanceType<typeof AiAssistantPanel> | null>(null)
-// AI 整理：第二行输入（与查找分离），走面板的多重校验与确认卡
-const planText = ref('')
-function submitPlan() {
-  const value = planText.value.trim()
+// AI 整理：把搜索框里的指令交给 AI（多重校验 + 确认卡）；普通关键词结果输入时已实时显示
+function submitAiPlan() {
+  const value = query.value.trim()
   if (!value || aiBusy.value) return
   void aiPanel.value?.planAndConfirm(value)
-  planText.value = ''
 }
 // 房间概念已下线：AI 始终在全库范围查找
 const allOwnerIds = computed(() => store.members.map((member) => member.id))
@@ -372,27 +370,10 @@ onBeforeUnmount(() => {
         <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
           <AppIcon name="close" :size="18" />
         </button>
-        <button class="search-go" type="submit" :disabled="aiBusy || !query.trim()">
-          <AppIcon name="search" :size="16" /><span>查找</span>
+        <button class="search-go" type="button" :disabled="aiBusy || !query.trim()" @click="submitAiPlan">
+          <AppIcon name="sparkles" :size="16" /><span>AI 整理</span>
         </button>
       </div>
-      </form>
-      <form class="inventory-search" role="search" @submit.prevent="submitPlan()">
-        <div class="search-box">
-          <AppIcon name="sparkles" :size="21" />
-          <input
-            v-model="planText"
-            type="text"
-            :maxlength="2000"
-            :disabled="aiBusy"
-            placeholder="整理指令，如：把手办放到哪个箱子"
-            aria-label="AI 整理指令"
-            @keydown.enter.prevent="submitPlan()"
-          />
-          <button class="search-go" type="submit" :disabled="aiBusy || !planText.trim()">
-            <AppIcon name="sparkles" :size="16" /><span>AI 整理</span>
-          </button>
-        </div>
       </form>
     </div>
 
@@ -463,43 +444,7 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <div class="group-tabs" aria-label="按分组筛选">
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向左滚动分组"
-          @click="scrollGroups(-1)"
-        >‹</button>
-        <div ref="groupRow" class="group-tabs-groups">
-          <button
-            class="group-tab special"
-            :class="{ active: activeGroupId === 'ungrouped' }"
-            :aria-pressed="activeGroupId === 'ungrouped'"
-            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
-          >
-            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
-          </button>
-          <button
-            v-for="group in myGroups"
-            :key="group.id"
-            class="group-tab"
-            :class="{ active: activeGroupId === group.id }"
-            :aria-pressed="activeGroupId === group.id"
-            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
-          >
-            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
-          </button>
-          <button class="group-add" @click="groupModal = true">
-            <AppIcon name="plus" :size="16" />分组
-          </button>
-        </div>
-        <button
-          class="group-scroll-btn"
-          type="button"
-          aria-label="向右滚动分组"
-          @click="scrollGroups(1)"
-        >›</button>
-      </div>
+
       <details
         class="storage-fold"
         :open="storageOpen"
@@ -538,6 +483,43 @@ onBeforeUnmount(() => {
           <AppIcon class="fold-chev" name="down" :size="18" />
         </summary>
         <div class="fold-body">
+      <div class="group-tabs" aria-label="按分组筛选">
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向左滚动分组"
+          @click="scrollGroups(-1)"
+        >‹</button>
+        <div ref="groupRow" class="group-tabs-groups">
+          <button
+            class="group-tab special"
+            :class="{ active: activeGroupId === 'ungrouped' }"
+            :aria-pressed="activeGroupId === 'ungrouped'"
+            @click="activeGroupId = activeGroupId === 'ungrouped' ? 'all' : 'ungrouped'"
+          >
+            <AppIcon name="box" :size="15" />未分组<span>{{ ungroupedCount }}</span>
+          </button>
+          <button
+            v-for="group in myGroups"
+            :key="group.id"
+            class="group-tab"
+            :class="{ active: activeGroupId === group.id }"
+            :aria-pressed="activeGroupId === group.id"
+            @click="activeGroupId = activeGroupId === group.id ? 'all' : group.id"
+          >
+            <AppIcon name="grid" :size="15" />{{ group.name }}<span>{{ groupCount(group.id) }}</span>
+          </button>
+          <button class="group-add" @click="groupModal = true">
+            <AppIcon name="plus" :size="16" />分组
+          </button>
+        </div>
+        <button
+          class="group-scroll-btn"
+          type="button"
+          aria-label="向右滚动分组"
+          @click="scrollGroups(1)"
+        >›</button>
+      </div>
       <p v-if="editingSort" class="inline-notice">点击箭头调整顺序，再点“保存顺序”。</p>
       <div v-if="displayContainers.length" class="container-rows">
         <article
