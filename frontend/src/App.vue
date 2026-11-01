@@ -67,6 +67,8 @@ const syncInfo = computed(() => {
 })
 function onSetupDone() {
   setupDone.value = true
+  // 初始化完成必须持久化，否则每次重启都会再进初始化页
+  localStorage.setItem('myhouse.setupDone', '1')
   void connect()
 }
 const modals = useItemModals()
