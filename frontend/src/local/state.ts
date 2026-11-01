@@ -33,6 +33,10 @@ export interface HistoryRow {
   undone_at: string | null; before: unknown
 }
 export interface AiLocal { base_url: string; model: string; api_key: string }
+/** 电脑开关配置（MAC/IP/控制令牌）。只存本机，不随云同步上传（含令牌）。 */
+export interface PcHostRow {
+  id: number; name: string; mac: string; ip: string; port: number; token: string
+}
 
 export interface LocalState {
   version: 1
@@ -45,6 +49,7 @@ export interface LocalState {
   attachments: AttachmentRow[]
   history: HistoryRow[]
   ai: AiLocal
+  pcs?: PcHostRow[]
 }
 
 export function freshState(): LocalState {
@@ -53,6 +58,7 @@ export function freshState(): LocalState {
     members: [{ id: 1, name: '家', sort_order: 1 }],
     groups: [], containers: [], items: [], recipes: [], attachments: [], history: [],
     ai: { base_url: 'http://192.168.3.100:31415/v1', model: 'auto', api_key: '' },
+    pcs: [],
   }
 }
 

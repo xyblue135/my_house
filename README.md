@@ -18,6 +18,7 @@
 - **菜谱管理**：菜谱与图片
 - **操作历史与撤销**：误删误改可一键还原
 - **云同步**：GitHub / Gitee 私有仓库双通道，可只配一个，也可互为备份
+- **电脑开关**：局域网内远程唤醒（WoL 魔术包）/ 睡眠 / 关机家里的 Windows、Linux 电脑，配置见 [scripts/pc-agent/README.md](scripts/pc-agent/README.md)
 
 ## 使用教程
 

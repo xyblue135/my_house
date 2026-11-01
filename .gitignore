@@ -35,3 +35,4 @@ frontend/.env.production.local
 
 # Personal scratch tools (not part of the app)
 scripts/MailAmounts.java
+__pycache__/

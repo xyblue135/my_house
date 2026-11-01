@@ -17,6 +17,10 @@ import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
   setTtsEnabled, setTtsCustomOn, setTtsCustomUrl, setTtsCustomKey, speak,
 } from '../composables/useSpeech'
+import {
+  pcHosts, savePcHost, deletePcHost, wakePc, sleepPc, shutdownPc, testPc, DEFAULT_PC_PORT,
+  type PcHostRow,
+} from '../local/pcPower'
 import type { AiSettings } from '../types'
 
 const store = useAppStore()
@@ -176,6 +180,56 @@ async function testAi() {
     const { aiTest } = await import('../local/ai')
     aiTestResult.value = await aiTest()
   } finally { aiTesting.value = false }
+}
+
+// ---- 开关（电脑唤醒 / 睡眠 / 关机）----
+// state 在路由就绪前已加载完成，这里可直接快照
+const pcList = ref<PcHostRow[]>([...pcHosts()])
+const pcFormOpen = ref(false)
+const pcEditingId = ref<number | null>(null)
+const pcForm = reactive({ name: '', mac: '', ip: '', port: DEFAULT_PC_PORT, token: '' })
+const pcBusyId = ref<number | null>(null)
+function refreshPcList() {
+  pcList.value = [...pcHosts()]
+}
+function openPcAdd() {
+  pcEditingId.value = null
+  Object.assign(pcForm, { name: '', mac: '', ip: '', port: DEFAULT_PC_PORT, token: '' })
+  pcFormOpen.value = true
+}
+function openPcEdit(host: PcHostRow) {
+  pcEditingId.value = host.id
+  Object.assign(pcForm, { name: host.name, mac: host.mac, ip: host.ip, port: host.port, token: host.token })
+  pcFormOpen.value = true
+}
+function submitPcForm() {
+  try {
+    savePcHost({ ...pcForm, id: pcEditingId.value })
+    pcFormOpen.value = false
+    refreshPcList()
+    toast('电脑配置已保存（只存在这台手机上，不随云同步）')
+  } catch (error) {
+    toast((error as Error).message)
+  }
+}
+function removePc(host: PcHostRow) {
+  if (!window.confirm(`删除「${host.name}」的开关配置？`)) return
+  deletePcHost(host.id)
+  refreshPcList()
+}
+async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' | 'test') {
+  if (pcBusyId.value != null) return
+  if (action === 'sleep' && !window.confirm(`让「${host.name}」进入睡眠？`)) return
+  if (action === 'shutdown' && !window.confirm(`确定要关闭「${host.name}」吗？关机后可用「唤醒」重新开机。`)) return
+  pcBusyId.value = host.id
+  try {
+    const fn = { wake: wakePc, sleep: sleepPc, shutdown: shutdownPc, test: testPc }[action]
+    toast(await fn(host))
+  } catch (error) {
+    toast((error as Error).message)
+  } finally {
+    pcBusyId.value = null
+  }
 }
 </script>
 
@@ -397,6 +451,61 @@ async function testAi() {
               后，会将相关物品的名称、数量、位置等文字交给所配置的服务。照片与附件不会发送。
             </p>
           </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="settings-collapse">
+      <summary>开关（电脑唤醒 / 睡眠 / 关机）<AppIcon name="down" :size="18" /></summary>
+      <div class="settings-card">
+        <div class="settings-title">
+          <div class="settings-icon"><AppIcon name="wifi" /></div>
+          <div>
+            <h3>开关</h3>
+            <p>局域网内远程控制家里的电脑。「唤醒」是网卡魔术包，电脑关机也收得到；「睡眠 / 关机」需要电脑端常驻 pc-agent 脚本（仓库 scripts/pc-agent/ 里有 Windows 和 Linux 的部署说明）。</p>
+          </div>
+        </div>
+
+        <p v-if="!pcList.length && !pcFormOpen" class="pc-empty">
+          还没有配置电脑。每台电脑一条：MAC 用于唤醒，IP 和令牌用于睡眠 / 关机。
+        </p>
+        <div v-for="host in pcList" :key="host.id" class="pc-row">
+          <div class="pc-info">
+            <b>{{ host.name }}</b>
+            <span>{{ host.mac }} · {{ host.ip }}:{{ host.port }}</span>
+          </div>
+          <div class="pc-actions">
+            <button class="primary-btn compact" :disabled="pcBusyId !== null" @click="pcAction(host, 'wake')">唤醒</button>
+            <button class="outline-btn compact" :disabled="pcBusyId !== null" @click="pcAction(host, 'sleep')">睡眠</button>
+            <button class="outline-btn compact danger-outline" :disabled="pcBusyId !== null" @click="pcAction(host, 'shutdown')">关机</button>
+            <button class="outline-btn compact" :disabled="pcBusyId !== null" @click="pcAction(host, 'test')">测试</button>
+            <button class="icon-btn plain" aria-label="编辑这台电脑" @click="openPcEdit(host)"><AppIcon name="edit" :size="18" /></button>
+            <button class="icon-btn plain danger" :aria-label="'删除' + host.name" @click="removePc(host)"><AppIcon name="trash" :size="18" /></button>
+          </div>
+        </div>
+
+        <div v-if="pcFormOpen" class="settings-form pc-form">
+          <label>名称<input v-model="pcForm.name" placeholder="如：Windows 台式机 / Linux 主机" /></label>
+          <label>MAC 地址（唤醒用）<input v-model="pcForm.mac" placeholder="AA:BB:CC:DD:EE:FF" autocapitalize="off" /></label>
+          <div class="cloud-grid">
+            <label>IP 地址<input v-model="pcForm.ip" inputmode="numeric" placeholder="192.168.3.100" /></label>
+            <label>端口<input v-model.number="pcForm.port" inputmode="numeric" placeholder="31880" /></label>
+          </div>
+          <label
+            >控制令牌（睡眠 / 关机用）
+            <input
+              v-model="pcForm.token"
+              type="password"
+              autocomplete="off"
+              placeholder="与电脑端 PC_AGENT_TOKEN 一致，只存本机"
+          /></label>
+          <div class="settings-actions">
+            <button class="primary-btn compact" @click="submitPcForm">保存</button>
+            <button class="outline-btn compact" @click="pcFormOpen = false">取消</button>
+          </div>
+        </div>
+        <div v-else class="settings-actions">
+          <button class="outline-btn" @click="openPcAdd">添加电脑</button>
         </div>
       </div>
     </details>

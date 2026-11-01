@@ -220,6 +220,7 @@ export async function pushToCloud(provider: 'github' | 'gitee', onProgress: (tex
   onProgress('正在整理数据…')
   const safe: LocalState = JSON.parse(JSON.stringify(state))
   safe.ai = { base_url: safe.ai.base_url, model: safe.ai.model, api_key: '' } // 密钥绝不上云
+  delete safe.pcs // 电脑开关配置（含控制令牌）只留本机，整段不上云
   const blobs = await blobAll()
 
   const prevManifestRaw = localStorage.getItem(`${LAST_SYNC_KEY}.${provider}.manifest`)
