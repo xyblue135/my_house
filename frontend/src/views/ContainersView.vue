@@ -349,7 +349,13 @@ function openContainer(id: number): void {
           <span>目前收纳 <b>{{ allContainers.length }}</b> 个箱子，<b>{{ totalItems }}</b> 种物品。</span>
           <AppIcon class="chev" name="right" :size="15" />
         </div>
-        <button class="group-btn" type="button" @click.stop="groupPanelOpen = !groupPanelOpen">
+        <button
+          class="group-btn"
+          :class="{ open: groupPanelOpen }"
+          type="button"
+          :aria-expanded="groupPanelOpen"
+          @click.stop="groupPanelOpen = !groupPanelOpen"
+        >
           <AppIcon name="grid" :size="15" />分组
         </button>
       </div>

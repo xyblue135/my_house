@@ -2548,7 +2548,9 @@ button.online-status > span {
   padding: 18px 20px 118px;
   background: linear-gradient(165deg, #d3e6dd 0%, #e2eee0 38%, #eef3ea 70%, var(--bg) 100%);
   border-radius: 0 0 24px 24px;
+  /* clip 而非 hidden：装饰元素的外溢不再撑出可滚动区，避免点击时整个 hero 被横向滚走 */
   overflow: hidden;
+  overflow: clip;
 }
 .hero-scene {
   position: absolute;
@@ -2601,6 +2603,163 @@ button.online-status > span {
 }
 .hero-stats .chev {
   color: var(--muted);
+}
+.hero-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-top .hero-stats {
+  flex: 1;
+  min-width: 0;
+}
+.group-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffffd9;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px #25352f0d;
+  transition:
+    transform 0.12s,
+    background 0.15s,
+    color 0.15s;
+}
+.group-btn:active {
+  transform: scale(0.95);
+}
+.group-btn.open {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ---- 分组面板：与全局卡片同一语言（白卡 + 圆角 + 柔影） ---- */
+.group-panel {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 10px 30px #10182814;
+  padding: 8px 10px 12px;
+  animation: group-panel-in 0.18s ease-out;
+}
+@keyframes group-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.group-panel-title {
+  margin: 6px 10px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.group-check {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.group-check:active {
+  background: var(--soft);
+}
+.group-check input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  margin: 0;
+  padding: 0;
+  border-radius: 7px;
+  border: 1.5px solid #c9d4c9;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.group-check input[type='checkbox']:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.group-check input[type='checkbox']:checked::after {
+  content: '';
+  width: 10px;
+  height: 5.5px;
+  border-left: 2.2px solid #fff;
+  border-bottom: 2.2px solid #fff;
+  transform: rotate(-45deg) translateY(-1px);
+}
+.group-check-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-check-count {
+  flex: none;
+  min-width: 28px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.group-del {
+  flex: none;
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 7px;
+  border-radius: 10px;
+}
+.group-add-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 6px 0;
+}
+.group-add-row input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: 14.5px;
+  background: #fbfcfa;
+}
+.group-add-row .outline-btn {
+  border-radius: 999px;
+  padding: 0 16px;
+  min-height: 42px;
+  font-size: 13.5px;
+  color: var(--primary);
+  border-color: #cddccf;
 }
 
 /* ---- 搜索：大圆角白底胶囊 + 内嵌深绿查找按钮 ---- */
