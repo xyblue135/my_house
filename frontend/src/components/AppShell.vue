@@ -9,6 +9,7 @@ const route = useRoute()
 const navItems = [
   { name: 'containers', label: '物品', icon: 'box' },
   { name: 'cooking', label: '菜谱', icon: 'cooking' },
+  { name: 'health', label: '健康', icon: 'heart' },
   { name: 'settings', label: '设置', icon: 'settings' },
 ] as const
 const current = computed(() => route.name as string)

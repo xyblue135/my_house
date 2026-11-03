@@ -108,3 +108,36 @@ expect(() => validateAction({ type: 'teleport' })).toThrow('未知的操作类�
     expect(a.data?.name).toBe('手办')
   })
 })
+
+describe('health records', () => {
+  beforeEach(reset)
+
+  it('records weight and bowel, keeps latest stable with same-minute timestamps', async () => {
+    const { addHealth, currentWeight, weightDelta, bowelStreak, bowelCountToday } = await import('../src/local/health')
+    addHealth({ type: 'weight', kg: 72.5, at: '2026-11-03 09:00' })
+    addHealth({ type: 'weight', kg: 71.8, at: '2026-11-03 09:00' }) // 同一分钟两条
+    addHealth({ type: 'bowel', at: '2026-11-03 09:10' })
+    addHealth({ type: 'bowel', bristol: 4, note: '完美', at: '2026-11-02 20:00' })
+    expect(currentWeight()?.kg).toBe(71.8) // id 更大的是最新
+    expect(weightDelta()).toBe(-0.7)
+    expect(bowelCountToday()).toBe(1)
+    expect(bowelStreak()).toBe(2) // 今天 + 昨天
+  })
+
+  it('streak breaks after a missed day but survives an unrecorded today', async () => {
+    const { addHealth, bowelStreak } = await import('../src/local/health')
+    const day = (back: number, hour = '08:00') => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      const p = (n: number) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${hour}`
+    }
+    addHealth({ type: 'bowel', at: day(1) })
+    addHealth({ type: 'bowel', at: day(2) })
+    expect(bowelStreak()).toBe(2) // 今天没记不断签
+    addHealth({ type: 'bowel', at: day(4) })
+    expect(bowelStreak()).toBe(2) // 漏了昨天？不：昨天和前天连续，day4 不影响
+    addHealth({ type: 'bowel', at: day(0) })
+    expect(bowelStreak()).toBe(3) // 今天 + 昨 + 前
+  })
+})

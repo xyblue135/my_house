@@ -37,6 +37,15 @@ export interface AiLocal { base_url: string; model: string; api_key: string }
 export interface PcHostRow {
   id: number; name: string; mac: string; ip: string; port: number; token: string
 }
+/** 健康记录：体重与便便。at 为本地时间 'YYYY-MM-DD HH:mm'。 */
+export interface HealthRow {
+  id: number
+  type: 'weight' | 'bowel'
+  at: string
+  kg: number | null
+  bristol: number | null
+  note: string
+}
 
 export interface LocalState {
   version: 1
@@ -50,6 +59,7 @@ export interface LocalState {
   history: HistoryRow[]
   ai: AiLocal
   pcs?: PcHostRow[]
+  health?: HealthRow[]
 }
 
 export function freshState(): LocalState {
@@ -59,6 +69,7 @@ export function freshState(): LocalState {
     groups: [], containers: [], items: [], recipes: [], attachments: [], history: [],
     ai: { base_url: 'http://192.168.3.100:31415/v1', model: 'auto', api_key: '' },
     pcs: [],
+    health: [],
   }
 }
 

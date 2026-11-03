@@ -34,6 +34,10 @@ import {
   Cuboid,
   Mic,
   Volume2,
+  Heart,
+  Scale,
+  Flame,
+  Crown,
 } from '@lucide/vue'
 const icons = {
   box: Package,
@@ -70,6 +74,10 @@ const icons = {
   wifi: Wifi,
   mic: Mic,
   volume: Volume2,
+  heart: Heart,
+  scale: Scale,
+  flame: Flame,
+  crown: Crown,
 }
 withDefaults(defineProps<{ name: keyof typeof icons; size?: number }>(), { size: 20 })
 </script>

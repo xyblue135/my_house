@@ -4,6 +4,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/containers' },
   { path: '/containers', name: 'containers', component: () => import('./views/ContainersView.vue'), meta: { title: '物品' } },
   { path: '/cooking', name: 'cooking', component: () => import('./views/CookingView.vue'), meta: { title: '菜谱' } },
+  { path: '/health', name: 'health', component: () => import('./views/HealthView.vue'), meta: { title: '健康' } },
   { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { title: '设置' } },
 ]
 
