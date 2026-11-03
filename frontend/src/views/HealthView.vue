@@ -416,10 +416,12 @@ function removeRow(r: HealthRow) {
         </div>
         <div class="sheet-steps">
           <button class="step-btn" type="button" aria-label="减 1" @click="adjustWeight(-1)">−1</button>
-          <button class="step-btn" type="button" aria-label="减 0.5" @click="adjustWeight(-0.5)">−.5</button>
-          <button class="step-btn" type="button" aria-label="减 0.1" @click="adjustWeight(-0.1)">−.1</button>
-          <button class="step-btn plus" type="button" aria-label="加 0.1" @click="adjustWeight(0.1)">+.1</button>
-          <button class="step-btn plus" type="button" aria-label="加 0.5" @click="adjustWeight(0.5)">+.5</button>
+          <button class="step-btn" type="button" aria-label="减 0.5" @click="adjustWeight(-0.5)">−0.5</button>
+          <button class="step-btn" type="button" aria-label="减 0.1" @click="adjustWeight(-0.1)">−0.1</button>
+        </div>
+        <div class="sheet-steps">
+          <button class="step-btn plus" type="button" aria-label="加 0.1" @click="adjustWeight(0.1)">+0.1</button>
+          <button class="step-btn plus" type="button" aria-label="加 0.5" @click="adjustWeight(0.5)">+0.5</button>
           <button class="step-btn plus" type="button" aria-label="加 1" @click="adjustWeight(1)">+1</button>
         </div>
         <div class="settings-actions">

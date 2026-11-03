@@ -3668,18 +3668,22 @@ button.online-status > span {
   font-weight: 650;
   color: var(--muted);
 }
-/* 步进按钮独立一行，数字行保持完整宽度（斤三位数也不挤压） */
+/* 步进按钮：减法一行、加法一行，各三个等分 */
 .sheet-steps {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 .sheet-steps .step-btn {
   width: 100%;
   min-width: 0;
-  height: 40px;
+  height: 42px;
   margin: 0;
+  font-size: 13.5px;
+}
+.sheet-steps + .sheet-steps {
+  margin-top: 8px;
 }
 .sheet-input input {
   text-align: center;
