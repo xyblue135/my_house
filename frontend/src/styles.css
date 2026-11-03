@@ -3606,6 +3606,75 @@ button.online-status > span {
 .sheet .settings-actions {
   margin-top: 16px;
 }
+.sheet-sub {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.unit-seg {
+  display: inline-flex;
+  background: var(--soft);
+  border-radius: 999px;
+  padding: 3px;
+}
+.unit-seg button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.unit-seg button.on {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 1px 5px #25352f26;
+}
+.step-btn {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f5f7f3;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s, background 0.12s;
+}
+.step-btn:active {
+  transform: scale(0.9);
+  background: var(--soft);
+}
+.step-btn.plus {
+  background: var(--soft);
+  color: var(--primary);
+  border-color: #cddccf;
+}
+.sheet-unit {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.sheet-input .step-btn {
+  margin: 0 1px;
+}
+.sheet-input input {
+  text-align: center;
+  padding: 0 4px;
+}
 
 /* ---- 健康页动画 ---- */
 @keyframes num-roll {

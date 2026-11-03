@@ -114,10 +114,17 @@ describe('health records', () => {
 
   it('records weight and bowel, keeps latest stable with same-minute timestamps', async () => {
     const { addHealth, currentWeight, weightDelta, bowelStreak, bowelCountToday } = await import('../src/local/health')
-    addHealth({ type: 'weight', kg: 72.5, at: '2026-11-03 09:00' })
-    addHealth({ type: 'weight', kg: 71.8, at: '2026-11-03 09:00' }) // 同一分钟两条
-    addHealth({ type: 'bowel', at: '2026-11-03 09:10' })
-    addHealth({ type: 'bowel', bristol: 4, note: '完美', at: '2026-11-02 20:00' })
+    // 相对今天生成时间戳，避免跨天后「今天」判断失效
+    const day = (back: number, time: string) => {
+      const d = new Date()
+      d.setDate(d.getDate() - back)
+      const p = (n: number) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${time}`
+    }
+    addHealth({ type: 'weight', kg: 72.5, at: day(0, '09:00') })
+    addHealth({ type: 'weight', kg: 71.8, at: day(0, '09:00') }) // 同一分钟两条
+    addHealth({ type: 'bowel', at: day(0, '09:10') })
+    addHealth({ type: 'bowel', bristol: 4, note: '完美', at: day(1, '20:00') })
     expect(currentWeight()?.kg).toBe(71.8) // id 更大的是最新
     expect(weightDelta()).toBe(-0.7)
     expect(bowelCountToday()).toBe(1)

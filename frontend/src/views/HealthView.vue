@@ -35,25 +35,57 @@ const delta = computed(() => {
   if (list.length < 2) return null
   return Math.round(((list[list.length - 1].kg ?? 0) - (list[list.length - 2].kg ?? 0)) * 10) / 10
 })
+/** 差值按当前单位显示（斤 = kg×2） */
+const deltaDisplay = computed(() => {
+  if (delta.value == null) return null
+  return unit.value === 'jin' ? Math.round(delta.value * 2 * 10) / 10 : delta.value
+})
 
 // ---- 体重记录：底部输入条 ----
 const weightSheetOpen = ref(false)
 const weightInput = ref('')
 const weightSaving = ref(false)
 const saveTick = ref(0)
+
+// ---- 单位：kg / 斤（只影响显示与输入，存储永远是 kg） ----
+const UNIT_KEY = 'myhouse.weightUnit'
+const unit = ref<'kg' | 'jin'>((localStorage.getItem(UNIT_KEY) as 'kg' | 'jin') || 'kg')
+const unitLabel = computed(() => (unit.value === 'jin' ? '斤' : 'kg'))
+function setUnit(next: 'kg' | 'jin') {
+  if (unit.value === next) return
+  unit.value = next
+  localStorage.setItem(UNIT_KEY, next)
+  if (weightSheetOpen.value) openWeightSheet() // 按新单位重新预填
+}
+/** kg → 当前单位的显示字符串（一位小数） */
+function fmtKg(kg: number | null | undefined): string {
+  if (kg == null) return '--'
+  return (unit.value === 'jin' ? kg * 2 : kg).toFixed(1)
+}
 function openWeightSheet() {
-  weightInput.value = currentKg.value != null ? String(currentKg.value) : ''
+  // 预填上一次的体重（当前单位），输入条里用 ± 步进微调即可
+  weightInput.value = currentKg.value != null ? fmtKg(currentKg.value) : ''
   weightSheetOpen.value = true
 }
+function adjustWeight(step: number) {
+  const cur = Number(weightInput.value || '0') || 0
+  weightInput.value = Math.max(0, cur + step).toFixed(1)
+}
 function saveWeight() {
-  // v-model 可能给数字（type=number 历史）也可能给字符串，统一按字符串解析
+  // v-model 可能给数字也可能给字符串，统一按字符串解析
   const text = String(weightInput.value ?? '').trim()
   const v = Number(text)
-  if (!text || !isFinite(v) || v < 20 || v > 300) {
-    toast('请输入合理的体重（20 ~ 300 kg）')
+  if (!text || !isFinite(v) || v <= 0) {
+    toast('请输入合理的数值')
     return
   }
-  addHealth({ type: 'weight', kg: v })
+  // 斤 → kg（保留两位）；kg 保留一位，存储统一为公斤
+  const kg = unit.value === 'jin' ? Math.round((v / 2) * 100) / 100 : Math.round(v * 10) / 10
+  if (kg < 20 || kg > 300) {
+    toast('请输入合理的体重（20 ~ 300 kg，即 40 ~ 600 斤）')
+    return
+  }
+  addHealth({ type: 'weight', kg })
   reload()
   weightSheetOpen.value = false
   saveTick.value++
@@ -192,7 +224,7 @@ const calendarCells = computed(() => {
 })
 const listRows = computed(() => [...rows.value].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id))
 function rowMain(r: HealthRow): string {
-  if (r.type === 'weight') return `${r.kg} kg`
+  if (r.type === 'weight') return `${fmtKg(r.kg)} ${unitLabel.value}`
   const meta = bristolMeta(r.bristol)
   return meta ? `便便 · ${meta.face} ${meta.label}` : '便便 · 随手一笔'
 }
@@ -218,7 +250,13 @@ function removeRow(r: HealthRow) {
     <section class="health-card weight-card">
       <div class="health-card-head">
         <h3><AppIcon name="scale" :size="18" /> 体重</h3>
-        <button class="outline-btn compact" @click="openWeightSheet">记录</button>
+        <div class="head-actions">
+          <div class="unit-seg" role="group" aria-label="体重单位">
+            <button :class="{ on: unit === 'kg' }" @click="setUnit('kg')">kg</button>
+            <button :class="{ on: unit === 'jin' }" @click="setUnit('jin')">斤</button>
+          </div>
+          <button class="outline-btn compact" @click="openWeightSheet">记录</button>
+        </div>
       </div>
       <div class="weight-row">
         <svg class="weight-gauge" viewBox="0 0 120 70" aria-hidden="true">
@@ -239,10 +277,10 @@ function removeRow(r: HealthRow) {
         </svg>
         <div class="weight-num-block" :key="saveTick">
           <div class="weight-num">
-            <span class="num-roll">{{ currentKg ?? '--' }}</span><small>kg</small>
+            <span class="num-roll">{{ fmtKg(currentKg) }}</span><small>{{ unitLabel }}</small>
           </div>
           <span v-if="delta != null" class="weight-delta" :class="{ down: delta < 0, up: delta > 0 }">
-            {{ delta > 0 ? '↑' : delta < 0 ? '↓' : '－' }} {{ Math.abs(delta) }} kg 较上次
+            {{ delta > 0 ? '↑' : delta < 0 ? '↓' : '－' }} {{ Math.abs(deltaDisplay ?? 0) }} {{ unitLabel }} 较上次
           </span>
           <span v-else class="weight-delta idle">记两次就能看变化</span>
         </div>
@@ -325,7 +363,7 @@ function removeRow(r: HealthRow) {
           <path :d="`M${monthChart.line}`" fill="none" stroke="#285f4e" stroke-width="2.5" stroke-linecap="round" />
           <g v-for="p in monthChart.pts" :key="p.day + '-' + p.v">
             <circle :cx="p.cx" :cy="p.cy" r="3.5" fill="#285f4e" />
-            <text :x="p.cx" :y="p.cy - 9" text-anchor="middle" class="chart-val">{{ p.v }}</text>
+            <text :x="p.cx" :y="p.cy - 9" text-anchor="middle" class="chart-val">{{ unit === 'jin' ? (p.v * 2).toFixed(1) : p.v }}</text>
           </g>
         </svg>
         <p v-else class="health-hint">这个月体重记录还不到两次，先去上面记一笔。</p>
@@ -368,13 +406,19 @@ function removeRow(r: HealthRow) {
     <!-- 体重输入条 -->
     <div v-if="weightSheetOpen" class="sheet-backdrop" @click.self="weightSheetOpen = false">
       <div class="sheet">
-        <h3>记录体重</h3>
+        <h3>记录体重 <small class="sheet-sub">在上次基础上微调</small></h3>
         <div class="sheet-input">
+          <button class="step-btn" type="button" aria-label="减 1" @click="adjustWeight(-1)">−1</button>
+          <button class="step-btn" type="button" aria-label="减 0.5" @click="adjustWeight(-0.5)">−.5</button>
+          <button class="step-btn" type="button" aria-label="减 0.1" @click="adjustWeight(-0.1)">−.1</button>
           <input
             v-model="weightInput" type="text" inputmode="decimal"
-            placeholder="72.5" @keydown.enter.prevent="saveWeight"
+            :placeholder="unit === 'jin' ? '145.0' : '72.5'" @keydown.enter.prevent="saveWeight"
           />
-          <span>kg</span>
+          <span class="sheet-unit">{{ unitLabel }}</span>
+          <button class="step-btn plus" type="button" aria-label="加 0.1" @click="adjustWeight(0.1)">+.1</button>
+          <button class="step-btn plus" type="button" aria-label="加 0.5" @click="adjustWeight(0.5)">+.5</button>
+          <button class="step-btn plus" type="button" aria-label="加 1" @click="adjustWeight(1)">+1</button>
         </div>
         <div class="settings-actions">
           <button class="primary-btn" :disabled="weightSaving" @click="saveWeight">保存</button>
