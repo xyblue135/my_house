@@ -408,14 +408,16 @@ function removeRow(r: HealthRow) {
       <div class="sheet">
         <h3>记录体重 <small class="sheet-sub">在上次基础上微调</small></h3>
         <div class="sheet-input">
-          <button class="step-btn" type="button" aria-label="减 1" @click="adjustWeight(-1)">−1</button>
-          <button class="step-btn" type="button" aria-label="减 0.5" @click="adjustWeight(-0.5)">−.5</button>
-          <button class="step-btn" type="button" aria-label="减 0.1" @click="adjustWeight(-0.1)">−.1</button>
           <input
             v-model="weightInput" type="text" inputmode="decimal"
             :placeholder="unit === 'jin' ? '145.0' : '72.5'" @keydown.enter.prevent="saveWeight"
           />
           <span class="sheet-unit">{{ unitLabel }}</span>
+        </div>
+        <div class="sheet-steps">
+          <button class="step-btn" type="button" aria-label="减 1" @click="adjustWeight(-1)">−1</button>
+          <button class="step-btn" type="button" aria-label="减 0.5" @click="adjustWeight(-0.5)">−.5</button>
+          <button class="step-btn" type="button" aria-label="减 0.1" @click="adjustWeight(-0.1)">−.1</button>
           <button class="step-btn plus" type="button" aria-label="加 0.1" @click="adjustWeight(0.1)">+.1</button>
           <button class="step-btn plus" type="button" aria-label="加 0.5" @click="adjustWeight(0.5)">+.5</button>
           <button class="step-btn plus" type="button" aria-label="加 1" @click="adjustWeight(1)">+1</button>

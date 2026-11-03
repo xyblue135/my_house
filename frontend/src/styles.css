@@ -3668,8 +3668,18 @@ button.online-status > span {
   font-weight: 650;
   color: var(--muted);
 }
-.sheet-input .step-btn {
-  margin: 0 1px;
+/* 步进按钮独立一行，数字行保持完整宽度（斤三位数也不挤压） */
+.sheet-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.sheet-steps .step-btn {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
 }
 .sheet-input input {
   text-align: center;
