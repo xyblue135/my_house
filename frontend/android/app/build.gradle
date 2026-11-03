@@ -7,8 +7,8 @@ android {
         applicationId "com.xyblue.myhouse"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10
-        versionName "2.2.2"
+        versionCode 11
+        versionName "2.2.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,11 +17,13 @@ android {
         }
     }
     signingConfigs {
-        // 正式签名：CI 在打 tag 时通过环境变量注入（密钥存 GitHub Secrets，不入库）
+        // 正式签名：CI 在打 tag 时通过环境变量注入（密钥存 GitHub Secrets，不入库）。
+        // 证书由工作流解码到 frontend/android/release.keystore，必须用 rootProject 解析——
+        // 此前用 file() 相对 app 模块解析导致永远找不到文件，静默回退随机 debug 证书。
         release {
             def ksFile = System.getenv("KEYSTORE_FILE")
-            if (ksFile != null && file(ksFile).exists()) {
-                storeFile file(ksFile)
+            if (ksFile != null && rootProject.file(ksFile).exists()) {
+                storeFile rootProject.file(ksFile)
                 storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
                 keyAlias "myhouse"
                 keyPassword System.getenv("KEYSTORE_PASSWORD") ?: ""
@@ -33,7 +35,11 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             def ksFile = System.getenv("KEYSTORE_FILE")
-            if (ksFile != null && file(ksFile).exists()) {
+            if (ksFile != null) {
+                // CI 指定了正式证书却找不到文件时直接失败，绝不静默退回随机 debug 签名
+                if (!rootProject.file(ksFile).exists()) {
+                    throw new GradleException("KEYSTORE_FILE=${ksFile} 不存在（应位于 ${rootProject.projectDir}），拒绝使用随机 debug 签名发布")
+                }
                 signingConfig signingConfigs.release
             } else {
                 // 无签名环境（本地日常构建）回退 debug 签名，保证可安装
