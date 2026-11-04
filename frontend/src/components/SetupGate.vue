@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { initLocal, state, persistNow } from '../local/state'
 import { aiTest } from '../local/ai'
-import { providers, saveProviders, verifyProvider, pullFromCloud, type ProviderConfig, type CloudProviders } from '../local/sync'
+import { providers, saveProviders, verifyProvider, pullFromCloud, DEFAULT_PROVIDERS, type ProviderConfig, type CloudProviders } from '../local/sync'
 
 const emit = defineEmits<{ done: [] }>()
 
@@ -16,9 +16,22 @@ const ai = reactive({
 })
 
 type SlotKey = 'github' | 'gitee'
+/**
+ * 初始值：已保存的配置优先，没保存过的用预设仓库补地址与分支。
+ * 令牌永远从已保存的本机配置读，预设里没有任何密钥。
+ */
+function initialConfig(key: SlotKey): ProviderConfig {
+  const saved = providers[key]
+  const preset = DEFAULT_PROVIDERS[key]
+  return {
+    url: saved.url || preset.url,
+    branch: saved.branch || preset.branch,
+    token: saved.token,
+  }
+}
 const slots = reactive<Record<SlotKey, { cfg: ProviderConfig; verifying: boolean; result: string; ok: boolean }>>({
-  github: { cfg: { ...providers.github }, verifying: false, result: '', ok: false },
-  gitee: { cfg: { ...providers.gitee }, verifying: false, result: '', ok: false },
+  github: { cfg: initialConfig('github'), verifying: false, result: '', ok: false },
+  gitee: { cfg: initialConfig('gitee'), verifying: false, result: '', ok: false },
 })
 const importing = ref(false)
 const importResult = ref('')
@@ -120,6 +133,9 @@ async function startOffline() {
               placeholder="Fine-grained PAT，只存本机"
           /></label>
         </div>
+        <p v-if="slots.github.cfg.url && !slots.github.cfg.token" class="setup-hint">
+          仓库地址已预填，只需填入访问令牌（PAT）。令牌只存本机，不进同步仓库。
+        </p>
         <div class="setup-actions">
           <button class="outline-btn" type="button" :disabled="slots.github.verifying" @click="verify('github')">
             {{ slots.github.verifying ? '验证中…' : '验证鉴权' }}
@@ -312,6 +328,12 @@ input:focus {
 }
 .setup-result.ok {
   color: #2e7d32;
+}
+.setup-hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #7c8b7b;
 }
 .setup-start {
   display: grid;

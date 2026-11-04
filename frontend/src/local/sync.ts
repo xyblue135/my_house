@@ -21,6 +21,15 @@ const LAST_SYNC_KEY = 'myhouse.lastSync'
 
 export interface CloudProviders { github: ProviderConfig; gitee: ProviderConfig }
 
+/**
+ * 初始化页的仓库预设：只预填地址与分支，令牌（PAT）**绝不预置**——
+ * 它只能由用户手动输入、只存本机，不进代码、不进仓库。
+ */
+export const DEFAULT_PROVIDERS: CloudProviders = {
+  github: { url: 'https://github.com/xyblue135/my_house_data', branch: 'main', token: '' },
+  gitee: { url: '', branch: 'main', token: '' },
+}
+
 function loadConfig(): CloudProviders {
   try {
     const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')
@@ -178,6 +187,8 @@ async function requireOk(result: { status: number; data: unknown }, what: string
 }
 
 export async function verifyProvider(provider: 'github' | 'gitee', cfg: ProviderConfig): Promise<string> {
+  // 仓库是预设填好的，空令牌直接给一句人话，不必等 401
+  if (!cfg.token.trim()) throw new Error('请先填写访问令牌（PAT）——仓库地址已预填，令牌只存本机')
   let repo: Record<string, unknown>
   try {
     repo = await requireOk(await request(provider, cfg, 'GET', ''), '验证仓库')
