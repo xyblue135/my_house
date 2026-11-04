@@ -4,7 +4,7 @@
 
 **手机单机**的家庭物品收纳 App：数据全部保存在手机本地，通过 GitHub / Gitee 私有仓库同步备份。**无需服务器、无需注册登录**，装上就用，离线可用。
 
-当前版本：2.1.0
+当前版本：2.2.5
 
 | 首页 | 设置 |
 | --- | --- |
@@ -35,7 +35,7 @@
 
 1. 在 GitHub 上新建一个**私有**仓库（例如 `my_house_data`），不需要初始化任何文件
 2. 生成令牌：GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → 只勾选这个仓库、权限 **Contents: Read and write**
-3. 在 App 里填：仓库地址（`https://github.com/你的用户名/my_house_data`）、分支（`main`）、令牌
+3. 在 App 里**只填令牌**：仓库地址与分支（`main`）已预填，换仓库时直接改地址即可；令牌永远由自己手动输入，代码里没有任何密钥
 4. 点 **验证鉴权**——显示 ✓ 即配置成功
 5. 老用户：点 **从 GitHub 导入数据** 拉回全部箱子与物品；新用户直接进下一步
 
