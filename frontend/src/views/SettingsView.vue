@@ -242,7 +242,7 @@ async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' |
         <p class="page-description">查找范围与功能开关，也照顾好你的数据。</p>
       </div>
     </div>
-    <details class="settings-collapse" open>
+    <details class="settings-collapse">
       <summary>检查更新<AppIcon name="down" :size="18" /></summary>
       <div class="settings-card">
       <div class="settings-title">
