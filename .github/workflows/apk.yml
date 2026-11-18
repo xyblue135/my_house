@@ -1,17 +1,25 @@
 name: Build APK
 
-# 推送到 master 或手动触发时：测试 + 构建 Android APK，产物上传到 Actions Artifacts
+# 打包流水线：
+#   - 推到 master / 手动触发 → 构建 debug APK，作为 Actions 产物（自用安装）
+#   - 打 v* 标签 → 构建「正式签名」APK 并发布到 Releases（App 内「检查更新」读的就是它）
+# 版本号必须三处一致，见 scripts/check-version.mjs；标签必须与版本号一致。
 on:
   push:
     branches: [master]
     tags: ['v*']
   workflow_dispatch:
 
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 jobs:
   apk:
+    name: 构建 APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +33,14 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 版本号一致性检查
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            node scripts/check-version.mjs "${GITHUB_REF_NAME}"
+          else
+            node scripts/check-version.mjs
+          fi
 
       - name: 安装依赖
         working-directory: frontend
@@ -43,6 +59,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - uses: gradle/actions/setup-gradle@v4
+
       - name: 同步 Capacitor
         working-directory: frontend
         run: pnpm exec cap sync android
@@ -51,19 +69,32 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: 构建 Debug APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         working-directory: frontend/android
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
-      - name: 上传 APK 产物
+      - name: 上传 Debug APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
-          name: my-house-apk
+          name: my-house-apk-debug
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 30
 
-      # 打 v* 标签时：构建正式签名 APK 并发布到 Releases
+      # ---- 以下只在打 v* 标签时执行：正式签名 + 发布 ----
+      - name: 检查签名密钥是否已配置
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::缺少 KEYSTORE_BASE64 密钥，无法产出正式签名 APK（否则会退回随机 debug 证书，用户升级时签名不一致装不上）"
+            exit 1
+          fi
+
       - name: 解码签名证书
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -91,3 +122,4 @@ jobs:
         with:
           files: frontend/android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
+          fail_on_unmatched_files: true

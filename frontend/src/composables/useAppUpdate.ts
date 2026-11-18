@@ -1,6 +1,6 @@
 /**
  * 检查更新：对接 GitHub Releases。
- *  - App 启动时静默检查（24 小时节流），发现新版本提示一次
+ *  - **每次打开 App 都自动检查一次**（一次启动内不重复；失败静默，不打扰使用）
  *  - 设置页可手动「检查更新」，展示版本号、更新说明与 APK 下载链接
  *
  * 仓库地址可在设置里修改（默认为官方仓库）。公开仓库无需令牌；
@@ -16,7 +16,6 @@ export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSIO
 
 const UPDATE_REPO_KEY = 'myhouse.updateRepo'
 const LAST_CHECK_KEY = 'myhouse.update.lastCheck'
-const DAY = 24 * 60 * 60 * 1000
 
 export interface UpdateInfo {
   available: boolean
@@ -85,6 +84,7 @@ async function fetchLatest(): Promise<{ tag: string; notes: string; apkUrl: stri
 
 export const updateInfo = ref<UpdateInfo | null>(null)
 export const updateError = ref('')
+export const updateCheckedAt = ref('')
 
 export async function checkForUpdate(): Promise<UpdateInfo> {
   updateError.value = ''
@@ -97,17 +97,47 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     apkUrl: latest.apkUrl,
     releaseUrl: latest.htmlUrl,
   }
-  try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())) } catch { /* ignore */ }
+  const at = new Date().toLocaleString()
+  updateCheckedAt.value = at
+  try {
+    localStorage.setItem(LAST_CHECK_KEY, String(Date.now()))
+  } catch { /* ignore */ }
   return updateInfo.value
 }
 
-/** 启动时的静默检查：24 小时至多一次；结果存入 updateInfo 供设置页与顶栏提示。 */
+let launchCheck: Promise<void> | null = null
+let lastCheckAt = 0
+
+/**
+ * 启动时的自动检查：**每次打开 App 检查一次**（同一次启动内复用同一个结果，不会重复请求）。
+ * 失败一律静默——离线可用是这个 App 的前提，不能让检查更新挡住首页。
+ */
 export async function autoCheckOnLaunch(): Promise<void> {
+  if (launchCheck) return launchCheck
+  launchCheck = (async () => {
+    try {
+      await checkForUpdate()
+    } catch (error) {
+      updateError.value = (error as Error).message
+    } finally {
+      lastCheckAt = Date.now()
+    }
+  })()
+  return launchCheck
+}
+
+/**
+ * 从后台切回前台也检查一次（Android 上「打开 App」多数是恢复而不是重启）。
+ * 5 分钟内不重复请求，避免频繁切换页面把 GitHub 匿名接口额度用光。
+ */
+export async function checkForUpdateOnResume(gapMs = 5 * 60 * 1000): Promise<void> {
+  if (Date.now() - lastCheckAt < gapMs) return
+  lastCheckAt = Date.now()
   try {
-    const last = Number(localStorage.getItem(LAST_CHECK_KEY) || 0)
-    if (Date.now() - last < DAY) return
     await checkForUpdate()
-  } catch { /* 静默失败：无网或仓库不可读时不打扰 */ }
+  } catch (error) {
+    updateError.value = (error as Error).message
+  }
 }
 
 export function shouldSuggestUpdate(): boolean {

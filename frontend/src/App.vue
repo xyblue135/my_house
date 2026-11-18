@@ -4,12 +4,12 @@ import GlobalModals from './components/GlobalModals.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import SetupGate from './components/SetupGate.vue'
 import AppIcon from './components/AppIcon.vue'
-import { onBeforeUnmount, onMounted, ref, computed } from 'vue'
+import { onBeforeUnmount, onMounted, ref, computed, watch } from 'vue'
 import { APP_VERSION, connection } from './api'
 
 
 import { providers, lastSyncText } from './local/sync'
-import { shouldSuggestUpdate, updateInfo } from './composables/useAppUpdate'
+import { shouldSuggestUpdate, updateInfo, checkForUpdateOnResume } from './composables/useAppUpdate'
 import { lights, LIGHT_LABEL } from './local/statusLights'
 import { useAppBootstrap } from './composables/useAppBootstrap'
 import { provideItemModals, useItemModals } from './composables/useItemModals'
@@ -53,7 +53,16 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (sloganTimer) clearInterval(sloganTimer)
 })
-onMounted(() => { document.addEventListener('click', () => { showSyncInfo.value = false }) })
+onMounted(() => { document.addEventListener('click', closeSyncInfo) })
+onBeforeUnmount(() => { document.removeEventListener('click', closeSyncInfo) })
+function closeSyncInfo() { showSyncInfo.value = false }
+
+// 从后台切回前台也查一次更新（Android 上「打开 App」通常是恢复，不是重启）
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') void checkForUpdateOnResume()
+}
+onMounted(() => { document.addEventListener('visibilitychange', onVisibilityChange) })
+onBeforeUnmount(() => { document.removeEventListener('visibilitychange', onVisibilityChange) })
 // 右上角状态预览：本机数据 + 两个云仓库的配置与最近同步
 const showSyncInfo = ref(false)
 const syncInfo = computed(() => {
@@ -73,8 +82,16 @@ function onSetupDone() {
   void connect()
 }
 const modals = useItemModals()
-const { toastText } = useToast()
+const { toastText, toast } = useToast()
 provideItemModals(modals)
+
+// 每次打开检查到新版本时，轻提示一次（不挡首页，详情在 设置 → 检查更新）
+let updateNoticed = false
+watch(updateInfo, (info) => {
+  if (!info?.available || updateNoticed) return
+  updateNoticed = true
+  toast(`发现新版本 ${info.version}，设置 → 检查更新 可下载`)
+})
 </script>
 
 <template>
