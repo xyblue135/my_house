@@ -24,7 +24,9 @@ export interface ItemRow {
 export interface RecipeRow { id: number; title: string; steps: string; created_at: string; updated_at: string }
 export interface AttachmentRow {
   id: number; item_id: number | null; container_id: number | null; recipe_id: number | null;
-  kind: 'image' | 'file' | 'video'; filename: string; mime_type: string; size_bytes: number; created_at: string
+  kind: 'image' | 'file' | 'video'; filename: string; mime_type: string; size_bytes: number; created_at: string;
+  /** 电脑端备份里的相对路径（如 container-1/xxx.jpg）。手机自己上传的附件没有这个字段。 */
+  stored_name?: string | null
 }
 export interface HistoryRow {
   id: number; action_type: 'add' | 'update' | 'delete'; entity_type: 'item' | 'container' | 'group' | 'recipe' | 'attachment';
@@ -94,9 +96,31 @@ export function now(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19)
 }
 
+/**
+ * 拉取云端数据后，本机的自增计数器 seq 可能比云端里的 id 小，
+ * 直接新建就会撞 id（物品凭空覆盖、附件错位）。这里把 seq 顶到最大 id 之上。
+ */
+export function normalizeSeq(target: LocalState): void {
+  let max = 0
+  const seen = (id: unknown) => {
+    const n = Number(id)
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  for (const list of [target.members, target.groups, target.containers, target.items,
+    target.recipes, target.attachments, target.history] as { id?: unknown }[][]) {
+    for (const row of list ?? []) seen(row?.id)
+  }
+  for (const pc of target.pcs ?? []) seen(pc.id)
+  for (const h of target.health ?? []) seen(h.id)
+  target.seq = Math.max(Number(target.seq) || 0, max, 1000)
+}
+
 export async function loadState(): Promise<void> {
   const saved = await docGet<LocalState>('state')
-  if (saved) Object.assign(state, saved)
+  if (saved) {
+    Object.assign(state, saved)
+    normalizeSeq(state)
+  }
   for (const att of await blobAll()) {
     if (!blobUrls.has(att.id)) blobUrls.set(att.id, URL.createObjectURL(att.bytes))
   }
@@ -120,6 +144,7 @@ export async function replaceState(incoming: LocalState): Promise<void> {
   // 清掉旧附件的对象 URL 与存储，再整体换入
   for (const url of blobUrls.values()) URL.revokeObjectURL(url)
   blobUrls.clear()
+  normalizeSeq(incoming)
   for (const att of incoming.attachments) {
     const stored = await blobGet(att.id)
     if (stored) blobUrls.set(att.id, URL.createObjectURL(stored.bytes))

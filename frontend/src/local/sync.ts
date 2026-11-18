@@ -6,8 +6,12 @@
  */
 import { CapacitorHttp } from '@capacitor/core'
 import { state, replaceState, blobAll, persistNow, type LocalState } from './state'
-import { snapshotAll } from './storage'
+import { snapshotAll, blobPut } from './storage'
 import { setLight } from './statusLights'
+import {
+  pickDataJson, planAttachmentDownloads, explainMissingDataJson, describeAttachmentGap,
+  hasServerSnapshot, type TreeEntry,
+} from './syncFormat'
 
 export interface ProviderConfig {
   /** 仓库地址，如 https://github.com/xyblue135/my_house_data */
@@ -308,13 +312,28 @@ export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (t
   const commitSha = String((head as Record<string, Record<string, unknown>>)?.object?.sha ?? '')
   if (!commitSha) throw new Error('云端分支还没有任何提交，请先在其它设备推送')
   const tree = await requireOk(await request(provider, cfg, 'GET', `/git/trees/${commitSha}?recursive=1`), '读取目录树')
-  const entries = (tree.tree ?? []) as { path: string; sha: string; type: string }[]
-  const jsonEntry = entries.find((e) => e.path === 'data.json' && e.type === 'blob')
-  if (!jsonEntry) throw new Error('云端没有 data.json（旧版备份仓库请用恢复功能或先推送一次）')
+  const entries = (tree.tree ?? []) as TreeEntry[]
+  // 兼容三种布局：根 data.json / backup/data.json / 只有 inventory.db 的电脑端快照
+  const jsonEntry = pickDataJson(entries)
+  if (!jsonEntry) throw new Error(explainMissingDataJson(entries))
 
   onProgress('正在下载数据…')
   const jsonBlob = await requireOk(await request(provider, cfg, 'GET', `/git/blobs/${jsonEntry.sha}`), '下载数据')
   const incoming = JSON.parse(new TextDecoder().decode(base64ToBytes(String(jsonBlob.content ?? '')))) as LocalState
+  if (!Array.isArray(incoming.items) || !Array.isArray(incoming.containers)) {
+    throw new Error(`${jsonEntry.path} 不是本 App 的数据文件（缺少 items/containers 字段），请确认仓库与分支`)
+  }
+  incoming.attachments = Array.isArray(incoming.attachments) ? incoming.attachments : []
+  incoming.history = Array.isArray(incoming.history) ? incoming.history : []
+  // 拉取只覆盖「数据」：AI 密钥、电脑开关配置、健康记录都是本机私有，
+  // 云端文件里没有（或为空）时必须保留本机的，否则一次拉取就把密钥抹掉了。
+  incoming.ai = {
+    base_url: incoming.ai?.base_url?.trim() || state.ai.base_url,
+    model: incoming.ai?.model?.trim() || state.ai.model,
+    api_key: state.ai.api_key,
+  }
+  incoming.pcs = state.pcs
+  if (!Array.isArray(incoming.health)) incoming.health = state.health ?? []
 
   const fp = repoFingerprint(provider, cfg)
   const bound = getRepoBinding(provider)
@@ -332,17 +351,22 @@ export async function pullFromCloud(provider: 'github' | 'gitee', onProgress: (t
   onProgress('正在为本机数据建立安全快照…')
   await snapshotAll()
 
-  const attEntries = entries.filter((e) => e.path.startsWith('attachments/') && e.type === 'blob')
-  for (let i = 0; i < attEntries.length; i++) {
-    onProgress(`正在下载附件 ${i + 1}/${attEntries.length}…`)
-    const blob = await requireOk(await request(provider, cfg, 'GET', `/git/blobs/${attEntries[i].sha}`), '下载附件')
+  const { plan, missing } = planAttachmentDownloads(entries, incoming.attachments, jsonEntry.path)
+  for (let i = 0; i < plan.length; i++) {
+    onProgress(`正在下载附件 ${i + 1}/${plan.length}…`)
+    const entry = entries.find((e) => e.path === plan[i].path)
+    if (!entry) { missing.push(plan[i].id); continue }
+    const blob = await requireOk(await request(provider, cfg, 'GET', `/git/blobs/${entry.sha}`), `下载附件 ${plan[i].id}`)
     const bytes = base64ToBytes(String(blob.content ?? ''))
-    const id = Number(attEntries[i].path.split('/')[1])
-    const meta = incoming.attachments.find((a) => a.id === id)
-    if (meta) await (await import('./storage')).blobPut(id, { mime: meta.mime_type, bytes: new Blob([bytes as BlobPart], { type: meta.mime_type }) })
+    const meta = incoming.attachments.find((a) => a.id === plan[i].id)
+    const mime = meta?.mime_type || 'application/octet-stream'
+    await blobPut(plan[i].id, { mime, bytes: new Blob([bytes as BlobPart], { type: mime }) })
   }
   await replaceState(incoming)
   setRepoBinding(provider, fp)
   markSynced('pull')
-  return `${provider === 'github' ? 'GitHub' : 'Gitee'} 拉取完成（${incoming.items.length} 物品 / ${incoming.containers.length} 箱子）`
+  const gap = describeAttachmentGap(missing, plan.length)
+  const extra = hasServerSnapshot(entries) ? '（仓库里同时有电脑端 inventory.db，未改动）' : ''
+  const label = provider === 'github' ? 'GitHub' : 'Gitee'
+  return `${label} 拉取完成（${incoming.items.length} 物品 / ${incoming.containers.length} 箱子 / ${plan.length} 附件）${extra}${gap ? '；' + gap : ''}`
 }
