@@ -95,10 +95,11 @@
 | 拉取后数据不对 | 设置 → 云同步 → **恢复快照**，一键找回拉取前的本机数据（当前数据与快照互换，可反复恢复） |
 | 推送/拉取一直失败 | 检查网络（国内连 GitHub 不稳定，可换 Gitee 仓库或开代理）；检查令牌是否过期（重新生成后填入） |
 | 两台设备数据对不上 | 约定顺序：改动过的设备**先推送**，其它设备**再拉取**。拉取前 App 会自动保留安全快照 |
+| 拉取提示「云端没有 data.json」 | 数据仓库被**电脑端备份格式**覆盖了（只剩 `inventory.db` + `backup-meta.json`）。在电脑上跑 `python scripts/export-mobile-json.py --db inventory.db --out data.json` 后提交，手机就能拉。**不要**在手机上点推送去「修」它——那会拿手机上的旧数据盖掉云端 |
 
 ## 程序更新（App 版本升级）
 
-App 每天自动检查一次 GitHub Releases，发现新版本会在顶栏提示；也可以在 **设置 → 检查更新** 手动检查并下载 APK（覆盖安装，数据不受影响——更新前记得先推送一次数据）。
+App **每次打开都会自动检查一次** GitHub Releases（从后台切回前台也会补查，5 分钟内不重复请求），发现新版本会轻提示并显示在「设置 → 检查更新」；也可以在那里手动检查并下载 APK（覆盖安装，数据不受影响——更新前记得先推送一次数据）。
 
 完整的发版流程、App 对接 GitHub Releases 的原理和常见问题，见 **[docs/版本更新教程.md](docs/版本更新教程.md)**。
 
@@ -112,9 +113,19 @@ App 每天自动检查一次 GitHub Releases，发现新版本会在顶栏提示
 
 ## 下载与自动构建（CI/CD）
 
-仓库配置了 GitHub Actions（`.github/workflows/apk.yml`）：每次推送到 master 或手动触发，都会自动**测试 + 构建 APK**，产物上传到 Actions 的 Artifacts（名称 `my-house-apk`）。
+仓库有两条流水线：
 
-获取方式：仓库页面 → **Actions** → 选最新的 "Build APK" 运行 → Artifacts 下载 `my-house-apk`。CI 只产出 APK，**不包含任何密钥或用户数据**。
+| 工作流 | 触发 | 做什么 |
+| --- | --- | --- |
+| **CI**（`ci.yml`） | 推到 master、PR、手动 | 版本号一致性检查 → 前端单测 → 类型检查 + 构建；后端 `mvn verify`；测试报告存档 |
+| **Build APK**（`apk.yml`） | 推到 master、打 `v*` 标签、手动 | 版本检查 → 测试 → 构建 Web → `cap sync` → 构建 APK |
+
+- 推到 master：产出 **debug APK**，在 Actions 运行页的 Artifacts 里下载 `my-house-apk-debug`
+- 打 `v*` 标签：产出**正式签名** APK 并自动发布到 **Releases**，手机端「检查更新」读的就是它
+
+发版三步：改 `frontend/package.json` 的 version 和 `build.gradle` 的 versionName/versionCode（前者必须一致，versionCode 必须 +1）→ `git push` → `git tag vX.Y.Z && git push origin vX.Y.Z`。流水线会拦下版本不一致的提交（`scripts/check-version.mjs`）。
+
+CI 只产出构建产物，**不包含任何密钥或用户数据**；正式签名靠仓库 Secrets：`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`（缺了会直接失败，不会偷偷用 debug 证书）。
 
 > 仓库里出现的 `my_house_data` 备份仓库地址、`192.168.3.100:31415` AI 网关地址均为**示例参考**，请替换为你自己的仓库与网关。全仓库不含任何令牌、密钥（CI 有扫描）。
 
