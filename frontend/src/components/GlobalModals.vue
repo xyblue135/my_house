@@ -41,10 +41,14 @@ const currentGroups = computed(() =>
 
 function formatTime(value?: string | null) {
   if (!value) return ''
-  return value
-    .replace('T', ' ')
-    .replace(/\.\d+$/, '')
-    .slice(0, 16)
+  // created_at 存的是 UTC（state.now() 用 toISOString），必须转成本地时间再显示，
+  // 否则国内用户看到的操作历史会整体早 8 小时。
+  const iso = value.includes('T') ? value : value.replace(' ', 'T')
+  const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`
+  const date = new Date(zoned)
+  if (Number.isNaN(date.getTime())) return value.replace('T', ' ').slice(0, 16)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 </script>
 

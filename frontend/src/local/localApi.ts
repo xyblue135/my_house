@@ -40,11 +40,13 @@ function sortRows<T extends { sort_order?: number; id: number }>(rows: T[]): T[]
 }
 
 function historyView(h: (typeof state.history)[number]): HistoryEntry {
+  // 已撤销过的不能再撤销；附件只有「新增/删除」可撤销，改附件信息不支持
+  const undoable = !h.undone_at && !(h.action_type === 'update' && h.entity_type === 'attachment')
   return {
     id: h.id, action_type: h.action_type, entity_type: h.entity_type, entity_id: h.entity_id,
     item_id: h.item_id, container_id: h.container_id, related_container_id: null, owner_id: h.owner_id,
     source: h.source, description: h.description, created_at: h.created_at, undone_at: h.undone_at,
-    can_undo: h.action_type !== 'update' || true,
+    can_undo: undoable,
   }
 }
 
@@ -196,6 +198,13 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
     persist()
     return containerView(row)
   }
+  // 记录「最近打开」：排序模式「最近打开」依赖这个时间戳
+  if (kind === 'containers' && seg[2] && seg[3] === 'opened' && method === 'POST') {
+    const container = requireContainer(id)
+    container.last_opened_at = now()
+    persist()
+    return { ok: true }
+  }
   if (kind === 'containers' && seg[2] && !seg[3]) {
     const container = requireContainer(id)
     if (method === 'GET') return containerView(container)
@@ -221,11 +230,6 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
       })
       persist()
       return containerView(container)
-    }
-    if (method === 'POST' && seg[3] === 'opened') {
-      container.last_opened_at = now()
-      persist()
-      return { ok: true }
     }
     if (method === 'DELETE') {
       if (itemsOfLength(container.id) > 0) throw new Error('该箱子里还有物品，请先移动或删除物品')
@@ -278,7 +282,7 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
         return (i.name + ' ' + i.notes + ' ' + i.tags + ' ' + (c?.name ?? '')).toLocaleLowerCase().includes(q)
       })
     }
-    return rows.slice(0, 500) as unknown as Item[]
+    return rows as unknown as Item[]
   }
   if (path === '/api/items' && method === 'POST') {
     const payload = itemByNamePayload(b)
@@ -423,7 +427,8 @@ export async function localApi(req: LocalRequest): Promise<unknown> {
   if (path === '/api/settings' && method === 'POST') {
     if (b.base_url != null) state.ai.base_url = str(b.base_url)
     if (b.model != null) state.ai.model = str(b.model)
-    if (b.api_key) state.ai.api_key = str(b.api_key)
+    // 传了 api_key 字段就以它为准（空串 = 主动清除密钥）；没传则保持原样
+    if (b.api_key !== undefined && b.api_key !== null) state.ai.api_key = str(b.api_key).trim()
     persist()
     return { base_url: state.ai.base_url, model: state.ai.model, has_api_key: !!state.ai.api_key }
   }

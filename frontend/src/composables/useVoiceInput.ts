@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 
@@ -13,6 +13,16 @@ export function useVoiceInput() {
   const listening = ref(false)
   const supported = Capacitor.isNativePlatform()
   let lastText = ''
+
+  // 组件卸载时收掉原生监听，避免「麦克风还亮着」和重复回调
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      if (!supported) return
+      listening.value = false
+      void SpeechRecognition.stop().catch(() => undefined)
+      void SpeechRecognition.removeAllListeners().catch(() => undefined)
+    })
+  }
 
   async function toggle(handlers: {
     partial?: (text: string) => void

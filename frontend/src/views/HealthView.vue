@@ -148,9 +148,20 @@ const poopTick = ref(0)
 const bristolOpen = ref(false)
 const bristolSel = ref<number | null>(null)
 const bowelNote = ref('')
-const bowelTodayN = computed(() => bowelCountToday())
-const streak = computed(() => bowelStreak())
-const bowelMap = computed(() => bowelByDate())
+// 注意：healthRows() 读的是非响应式的 state，必须借 rows 订阅变化，
+// 否则 computed 只算一次就永远返回旧值（记完便便首页数字不动就是这个原因）
+const bowelTodayN = computed(() => {
+  void rows.value.length
+  return bowelCountToday()
+})
+const streak = computed(() => {
+  void rows.value.length
+  return bowelStreak()
+})
+const bowelMap = computed(() => {
+  void rows.value.length
+  return bowelByDate()
+})
 
 function recordBowel(bristol: number | null, note = '') {
   addHealth({ type: 'bowel', bristol, note })

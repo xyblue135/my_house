@@ -4,7 +4,7 @@ import { useAppStore } from '../store'
 import { useItemModals } from '../composables/useItemModals'
 import { useAppBootstrap } from '../composables/useAppBootstrap'
 import { useToast } from '../composables/useToast'
-import { containerInScope, scopeLabel } from '../composables/useSearchScope'
+import { containerInScope, scopeLabel, normalizeScope } from '../composables/useSearchScope'
 import { speak } from '../composables/useSpeech'
 import { api, attachmentUrl } from '../api'
 import ContainerDetailModal from '../components/ContainerDetailModal.vue'
@@ -79,6 +79,8 @@ const scopedResults = computed(() =>
 function groupCount(groupId: number): number {
   return allContainers.value.filter((c) => c.group_id === groupId).length
 }
+// 分组被删后查找范围留在已删除的分组上会导致「搜不到东西」，加载时归一化一次
+watch(myGroups, (groups) => normalizeScope(groups), { immediate: true })
 watch(hiddenGroups, cancelSort)
 watch(query, cancelSort)
 
@@ -264,7 +266,10 @@ function scrollGroups(dir: number) {
   groupRow.value?.scrollBy({ left: dir * 240, behavior: 'smooth' })
 }
 function touchContainer(id: number): void {
+  // 记录「最近打开」，并刷新一次的排序依据（不刷新的话「最近打开」排序要等下次进页面才生效）
   void api(`/api/containers/${id}/opened`, { method: 'POST', body: JSON.stringify({}) })
+    .then(() => refreshData())
+    .catch(() => undefined)
 }
 function openContainer(id: number): void {
   touchContainer(id)
@@ -410,7 +415,7 @@ function openContainer(id: number): void {
           <button v-if="query && !aiEnabled" type="button" class="icon-btn plain" aria-label="清空搜索" @click="query = ''">
             <AppIcon name="close" :size="18" />
           </button>
-          <button class="search-go" type="submit" :disabled="aiBusy || !query.trim()" @click="submitSearch">
+          <button class="search-go" type="submit" :disabled="aiBusy || !query.trim()">
             <AppIcon name="search" :size="16" /><span>查找</span>
           </button>
         </div>

@@ -27,6 +27,16 @@ export function scopeLabel(groups: { id: number; name: string }[]): string {
   return groups.find((g) => String(g.id) === searchScope.value)?.name ?? '全部'
 }
 
+/**
+ * 分组被删掉后，范围里存的分组 id 会指向不存在的分组 —— 搜索会一直空结果。
+ * 每次进入首页/设置页时归一化一次，悄悄退回「全部」。
+ */
+export function normalizeScope(groups: { id: number }[]): void {
+  const value = searchScope.value
+  if (value === 'all' || value === 'ungrouped') return
+  if (!groups.some((g) => String(g.id) === value)) setSearchScope('all')
+}
+
 /** 箱子是否落在当前查找范围内。 */
 export function containerInScope(container: { group_id?: number | null }): boolean {
   if (searchScope.value === 'all') return true

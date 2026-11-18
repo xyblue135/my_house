@@ -11,7 +11,7 @@ import {
 } from '../local/sync'
 import { snapshotExists, snapshotTime, restoreSnapshot } from '../local/storage'
 import {
-  APP_VERSION, updateInfo, updateError, updateRepo, setUpdateRepo, checkForUpdate,
+  APP_VERSION, updateInfo, updateError, updateRepo, setUpdateRepo, checkForUpdate, updateCheckedAt,
 } from '../composables/useAppUpdate'
 import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
@@ -53,7 +53,23 @@ async function saveSettings() {
   }
 }
 
+/** 清除本机保存的 AI 密钥（空串代表清空，不会误清其它字段）。 */
+async function clearApiKey() {
+  if (!window.confirm('清除本机保存的 AI 密钥？清除后 AI 查找会提示未配置。')) return
+  try {
+    Object.assign(
+      store.aiSettings,
+      await api<AiSettings>('/api/settings', { method: 'POST', body: JSON.stringify({ api_key: '' }) }),
+    )
+    apiKeyInput.value = ''
+    toast('AI 密钥已清除')
+  } catch (error) {
+    toast((error as Error).message)
+  }
+}
+
 onMounted(async () => {
+  refreshSnapshotState()
   try {
     const saved = await api<AiSettings & { api_key?: string }>('/api/settings')
     Object.assign(store.aiSettings, saved)
@@ -86,6 +102,14 @@ const syncSlots = reactive<Record<SlotKey, { busy: boolean; message: string }>>(
   github: { busy: false, message: '' },
   gitee: { busy: false, message: '' },
 })
+// 快照状态用 ref 镜像一份：snapshotTime()/snapshotExists() 读的是 localStorage，不是响应式的，
+// 拉取后界面不会自己刷新（之前「恢复快照」按钮一直是灰的，就是这个原因）
+const snapshotAt = ref(snapshotTime())
+const hasSnapshot = ref(snapshotExists())
+function refreshSnapshotState() {
+  snapshotAt.value = snapshotTime()
+  hasSnapshot.value = snapshotExists()
+}
 function updateProvider(slot: SlotKey, field: keyof ProviderConfig, value: string) {
   const next: CloudProviders = {
     github: { ...providers.github },
@@ -128,6 +152,7 @@ async function pullSlot(slot: SlotKey) {
       confirmCrossRepo: (message) => window.confirm(message),
     })
     toast(syncSlots[slot].message)
+    refreshSnapshotState()
     await refreshData()
   } catch (error) {
     syncSlots[slot].message = '✗ ' + (error as Error).message
@@ -249,7 +274,7 @@ async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' |
         <div class="settings-icon"><AppIcon name="download" /></div>
         <div>
           <h3>检查更新</h3>
-          <p>当前版本 v{{ APP_VERSION }}。App 每天自动检查一次；也可在这里手动检查并下载新版本。</p>
+          <p>当前版本 v{{ APP_VERSION }}。每次打开 App 都会自动检查一次；也可以在这里手动检查并下载新版本。</p>
         </div>
       </div>
       <label
@@ -271,6 +296,7 @@ async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' |
         >下载 v{{ updateInfo.version }}</button>
       </div>
       <p v-if="updateMessage" class="cloud-message" role="status">{{ updateMessage }}</p>
+      <p v-else-if="updateCheckedAt" class="cloud-message">上次检查：{{ updateCheckedAt }}</p>
       <details v-if="updateInfo?.available && updateInfo.notes" class="muted">
         <summary style="list-style: none; cursor: pointer">查看更新说明</summary>
         <p style="white-space: pre-wrap">{{ updateInfo.notes }}</p>
@@ -346,8 +372,8 @@ async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' |
         <p v-if="syncSlots[slot].message" class="cloud-message" role="status">{{ syncSlots[slot].message }}</p>
       </div>
       <div class="cloud-message snapshot-row">
-        <span>安全快照：拉取前自动保留本机数据{{ snapshotTime() ? `（${snapshotTime()}）` : '' }}</span>
-        <button class="outline-btn compact" :disabled="!snapshotExists()" @click="restoreSnapshotClick">
+        <span>安全快照：拉取前自动保留本机数据{{ snapshotAt ? `（${snapshotAt}）` : '（还没有快照）' }}</span>
+        <button class="outline-btn compact" :disabled="!hasSnapshot" @click="restoreSnapshotClick">
           恢复快照
         </button>
       </div>
@@ -433,9 +459,15 @@ async function pcAction(host: PcHostRow, action: 'wake' | 'sleep' | 'shutdown' |
         <div class="settings-actions">
           <button class="primary-btn">保存设置</button>
           <span v-if="settingsSaved">已保存</span>
-          <button class="outline-btn" :disabled="aiTesting" @click="testAi">
+          <button class="outline-btn" type="button" :disabled="aiTesting" @click="testAi">
             {{ aiTesting ? '测试中…' : '测试 AI 连接' }}
           </button>
+          <button
+            v-if="store.aiSettings.has_api_key"
+            class="outline-btn danger-outline"
+            type="button"
+            @click="clearApiKey"
+          >清除密钥</button>
           <span v-if="aiTestResult">{{ aiTestResult }}</span>
         </div>
       </form>

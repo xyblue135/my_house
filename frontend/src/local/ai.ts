@@ -268,15 +268,18 @@ export function aiExecute(action: AiAction): { reply: string } {
       const name = String(data.name ?? '').trim()
       if (!name) throw new Error('箱子名称不能为空')
       if (state.containers.some((c) => c.name === name)) throw new Error(`箱子「${name}」已存在`)
+      // 归属成员跟着现有数据走，别硬编码 1（成员改名/删除后 1 可能不存在）
+      const wanted = Number(data.owner_id ?? 0)
+      const ownerId = state.members.some((m) => m.id === wanted) ? wanted : (state.members[0]?.id ?? 1)
       const container = {
-        id: nextId(), name, notes: String(data.notes ?? ''), owner_id: 1, group_id: null,
+        id: nextId(), name, notes: String(data.notes ?? ''), owner_id: ownerId, group_id: null,
         pos_x: null, pos_y: null, pos_z: null, size_w: null, size_h: null, size_d: null,
         created_at: now(), updated_at: now(),
       }
       state.containers.unshift(container)
       logHistory({
         action_type: 'add', entity_type: 'container', entity_id: container.id, container_id: container.id,
-        owner_id: 1, source: 'ai', description: `新建箱子「${name}」`, before: null,
+        owner_id: ownerId, source: 'ai', description: `新建箱子「${name}」`, before: null,
       })
       persist()
       return { reply: `已新建箱子「${name}」` }

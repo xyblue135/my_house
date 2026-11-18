@@ -9,6 +9,9 @@ interface ItemForm {
   name: string; container_id: number; quantity: string;
 }
 
+/** 保存中标记：防止连点重复提交（批量新增会插两遍） */
+let saving = false
+
 /**
  * 注意：所有内部状态以 reactive() 暴露，模板里不需要 .value；
  * 提供方 (App.vue) 把实例 provide 后，任意 view 通过 useItemModals() 拿到同一份。
@@ -133,6 +136,8 @@ function createItemModalsImpl(): ItemModals {
   }
 
   async function saveItem(onSaved: () => Promise<void> | void) {
+    // 防连点：批量新增时重复点击会插入两遍同样的物品
+    if (saving) return
     // 名称支持多行批量：每行一个名称，箱子和数量保持一致。
     const names = itemForm.name
       .split('\n')
@@ -144,6 +149,7 @@ function createItemModalsImpl(): ItemModals {
       container_id: Number(itemForm.container_id),
       quantity: itemForm.quantity === '' ? null : Number(itemForm.quantity),
     }
+    saving = true
     try {
       if (itemEditingId.value) {
         // 编辑模式：仍是单个物品
@@ -175,8 +181,9 @@ function createItemModalsImpl(): ItemModals {
       }
       revokeUrls(pendingPreviews.value)
       pendingPreviews.value = []
+      pendingFiles.value = []
       await onSaved()
-    } catch (error) { toast((error as Error).message) }
+    } catch (error) { toast((error as Error).message) } finally { saving = false }
   }
 
   async function deleteItem(item: Item, onSaved: () => Promise<void> | void) {
@@ -270,6 +277,8 @@ function createItemModalsImpl(): ItemModals {
   }
 
   async function saveContainer(onSaved: () => Promise<void> | void) {
+    if (saving) return
+    saving = true
     try {
       const saved = await api<Container>(
         containerEditingId.value ? `/api/containers/${containerEditingId.value}` : '/api/containers',
@@ -282,7 +291,7 @@ function createItemModalsImpl(): ItemModals {
       containerModalOpen.value = false
       toast(containerEditingId.value ? '箱子已更新' : '箱子已创建')
       await onSaved()
-    } catch (error) { toast((error as Error).message) }
+    } catch (error) { toast((error as Error).message) } finally { saving = false }
   }
 
   async function deleteContainerAttachment(a: Attachment) {

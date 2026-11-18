@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { initLocal, state, persistNow } from '../local/state'
 import { aiTest } from '../local/ai'
@@ -7,12 +7,15 @@ import { providers, saveProviders, verifyProvider, pullFromCloud, DEFAULT_PROVID
 
 const emit = defineEmits<{ done: [] }>()
 
-// AI 网关：默认占位为示例地址；手机上 127.0.0.1 指手机自身，
+// AI 网关：真实配置以本机 state 为准（初始化页可能因为清缓存/重装再次出现，
+// 那时 state 里已有上次填的值）。手机上 127.0.0.1 指手机自身，
 // 网关跑在电脑上时请填电脑的局域网 IP（如 http://192.168.3.100:31415/v1）
-const ai = reactive({
-  base_url: localStorage.getItem('myhouse.ai.baseUrl') || 'http://192.168.3.100:31415/v1',
-  model: localStorage.getItem('myhouse.ai.model') || 'auto',
-  api_key: '',
+const ai = reactive({ base_url: '', model: 'auto', api_key: '' })
+onMounted(async () => {
+  await initLocal()
+  ai.base_url = state.ai.base_url || 'http://192.168.3.100:31415/v1'
+  ai.model = state.ai.model || 'auto'
+  ai.api_key = state.ai.api_key || ''
 })
 
 type SlotKey = 'github' | 'gitee'
@@ -89,14 +92,15 @@ async function importFromCloud(slot: SlotKey) {
 
 async function finish() {
   starting.value = true
-  persistAll()
+  // 先把本机数据读上来，再写回配置：顺序反了会把已保存的 AI 设置冲掉
   await initLocal()
+  persistAll()
   emit('done')
 }
 
 async function startOffline() {
-  persistAll()
   await initLocal()
+  persistAll()
   emit('done')
 }
 </script>

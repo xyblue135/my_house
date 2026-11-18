@@ -74,8 +74,15 @@ async function speakWithCustomApi(text: string): Promise<void> {
   const audio = new Audio(`data:audio/mpeg;base64,${bytesBase64}`)
   speaking.value = true
   audio.onended = () => { speaking.value = false }
-  audio.onerror = () => { speaking.value = false; throw new Error('音频播放失败') }
-  await audio.play()
+  // 事件回调里 throw 没有接收者（会变成未捕获错误），只在回调里复位状态，
+  // 失败要靠 play() 的 Promise 拒绝抛出给调用方
+  audio.onerror = () => { speaking.value = false }
+  try {
+    await audio.play()
+  } catch (error) {
+    speaking.value = false
+    throw error instanceof Error ? error : new Error('音频播放失败')
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

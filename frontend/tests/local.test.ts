@@ -95,8 +95,8 @@ describe('validateAction（AI 输出格式校验）', () => {
   beforeEach(() => { Object.assign(state, freshState()) })
 
   it('拒绝未知类型与缺失名称', () => {
-    expect(() => localApi && undefined).not.toThrow()
-expect(() => validateAction({ type: 'teleport' })).toThrow('未知的操作类型')
+    expect(() => validateAction(null)).toThrow()
+    expect(() => validateAction({ type: 'teleport' })).toThrow('未知的操作类型')
     expect(() => validateAction({ type: 'add_item', data: { name: '  ' } })).toThrow('缺少物品名称')
     expect(() => validateAction({ type: 'add_item', data: { name: '手办' } })).toThrow('不存在')
   })
@@ -146,5 +146,63 @@ describe('health records', () => {
     expect(bowelStreak()).toBe(2) // 漏了昨天？不：昨天和前天连续，day4 不影响
     addHealth({ type: 'bowel', at: day(0) })
     expect(bowelStreak()).toBe(3) // 今天 + 昨 + 前
+  })
+})
+
+describe('整理与设置相关回归', () => {
+  beforeEach(reset)
+
+  it('打开箱子会写入 last_opened_at（「最近打开」排序依赖它）', async () => {
+    const container = await createContainer('常用盒子')
+    const id = (container as { id: number }).id
+    expect((container as { last_opened_at?: string | null }).last_opened_at ?? null).toBeNull()
+
+    await localApi({ method: 'POST', path: `/api/containers/${id}/opened`, query: new URLSearchParams(), body: {}, form: null })
+
+    const list = await localApi({ method: 'GET', path: '/api/containers', query: new URLSearchParams(), body: null, form: null }) as { id: number; last_opened_at?: string | null }[]
+    const hit = list.find((c) => c.id === id)
+    expect(hit?.last_opened_at).toBeTruthy()
+  })
+
+  it('AI 密钥可以显式清空，不传字段时保持原值', async () => {
+    await localApi({ method: 'POST', path: '/api/settings', query: new URLSearchParams(), body: { api_key: 'sk-test' }, form: null })
+    expect(state.ai.api_key).toBe('sk-test')
+
+    // 只改模型：密钥不能被顺手清掉
+    await localApi({ method: 'POST', path: '/api/settings', query: new URLSearchParams(), body: { model: 'auto2' }, form: null })
+    expect(state.ai.api_key).toBe('sk-test')
+
+    // 显式传空串 = 清除
+    await localApi({ method: 'POST', path: '/api/settings', query: new URLSearchParams(), body: { api_key: '' }, form: null })
+    expect(state.ai.api_key).toBe('')
+  })
+
+  it('历史记录撤销一次后 can_undo 变 false', async () => {
+    const container = await createContainer('撤销盒子')
+    const containerId = (container as { id: number }).id
+    await localApi({ method: 'POST', path: '/api/items', query: new URLSearchParams(), body: { container_id: containerId, name: '小摆件' }, form: null })
+
+    const history = await localApi({ method: 'GET', path: '/api/history', query: new URLSearchParams({ container_id: String(containerId) }), body: null, form: null }) as { id: number; action_type: string; can_undo: boolean }[]
+    const add = history.find((h) => h.action_type === 'add')
+    expect(add?.can_undo).toBe(true)
+
+    await localApi({ method: 'POST', path: `/api/history/${add!.id}/undo`, query: new URLSearchParams(), body: null, form: null })
+
+    const after = await localApi({ method: 'GET', path: '/api/history', query: new URLSearchParams({ container_id: String(containerId) }), body: null, form: null }) as { id: number; can_undo: boolean }[]
+    expect(after.find((h) => h.id === add!.id)?.can_undo).toBe(false)
+  })
+
+  it('搜索不再被 500 条截断', async () => {
+    const container = await createContainer('大盒子')
+    const containerId = (container as { id: number }).id
+    for (let i = 0; i < 520; i++) {
+      state.items.push({
+        id: 10_000 + i, container_id: containerId, owner_id: 1, name: `批量物品${i}`,
+        quantity: 1, quantity_text: '', condition: '正常', notes: '', tags: '',
+        created_at: '', updated_at: '',
+      })
+    }
+    const found = await localApi({ method: 'GET', path: '/api/items', query: new URLSearchParams({ q: '批量物品' }), body: null, form: null }) as unknown[]
+    expect(found.length).toBe(520)
   })
 })

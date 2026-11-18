@@ -33,15 +33,17 @@ const ownerGroups = computed(() => {
 const items = ref<Item[]>([])
 const loading = ref(false)
 const loadError = ref('')
-watch([() => props.containerId, () => store.items], async ([id], _, onCleanup) => {
+watch([() => props.containerId, () => store.items], async ([id], [prevId], onCleanup) => {
   if (id == null) {
     items.value = []
     return
   }
   const controller = new AbortController()
   onCleanup(() => controller.abort())
-  items.value = []
-  loading.value = true
+  // 只有切换到另一个箱子才清空列表；store.items 变化（新增/编辑物品后刷新）时保留旧列表，
+  // 否则每次保存都会闪一下空白
+  if (prevId !== id) items.value = []
+  loading.value = items.value.length === 0
   loadError.value = ''
   try {
     const data = await api<Item[]>('/api/items?container_id=' + id, { signal: controller.signal })
