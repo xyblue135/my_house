@@ -17,6 +17,18 @@
   max-width: none;
   user-select: none;
   -webkit-user-drag: none;
+  transform-origin: center center;
+}
+.crop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  letter-spacing: 0.02em;
 }
 .crop-box {
   position: absolute;
