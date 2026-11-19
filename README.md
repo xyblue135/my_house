@@ -116,8 +116,8 @@
   "attachments": [...],  // 附件元数据（字节在 attachments/ 目录）
   "history": [...],      // 操作历史（含 before 快照，支持撤销）
   "ai": { "base_url": "", "model": "auto", "api_key": "" },
-  "pcs": [...],          // 电脑开关配置（MAC/IP/令牌）
-  "health": [...]        // 体重与便便记录
+  "pcs": [...],          // 可缺省：电脑开关配置（MAC/IP/令牌），只存手机
+  "health": [...]        // 可缺省：体重与便便，只存手机
 }
 ```
 
