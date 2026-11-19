@@ -81,11 +81,102 @@
 
 ### 5. 数据与安全
 
-- 数据保存在手机本地（IndexedDB），附件照片一并存储；**云仓库建议私有**
+- 数据保存在手机本地（IndexedDB），附件照片一并存储；**云仓库建议私有**。具体字段与仓库文件结构见下面的「数据格式与仓库结构」
 - 令牌与 AI 密钥只存在手机本机，不上传、不进仓库；泄露了随时在平台端撤销重生成
 - 同步时 AI 接口密钥**绝不写入云端仓库**
 - 操作历史保留最近 2000 条，支持撤销
 - 离线时一切功能可用，联网后再推送同步
+
+## 数据格式与仓库结构
+
+数据只有两个地方：**手机里的 IndexedDB**（唯一真实数据源）和**云端仓库里的文件**（备份/换机用）。下面是两边到底长什么样。
+
+### 一、手机本机（IndexedDB 数据库 `myhouse`）
+
+| 对象仓库 | 键 | 值 |
+| --- | --- | --- |
+| `docs` | `state` | 全部业务数据的 JSON（字段见下一节） |
+| `docs` | `snapshot-state` | 拉取前自动保留的快照；「恢复快照」时与 `state` 互换 |
+| `blobs` | 附件 id（数字） | `{ mime, bytes: Blob }`，附件字节本体 |
+| `blobs` | `snap-<附件id>` | 快照里的附件字节（同样参与互换） |
+
+另有 `localStorage` 只存配置与界面偏好，**不含业务数据**：`myhouse.setupDone`（初始化完成）、`myhouse.cloudProviders`（仓库地址/分支/令牌）、`myhouse.repoBindings`（仓库指纹）、`myhouse.lastSync`（上次同步时间）、`myhouse.snapshotAt`（快照时间）、`myhouse.searchScope`、`myhouse.updateRepo`，以及排序方式、折叠状态、朗读开关、体重单位等 UI 偏好。
+
+### 二、`data.json`（手机格式，`version: 1`）
+
+```jsonc
+{
+  "version": 1,          // 结构版本，只增字段不改含义
+  "seq": 1000,           // 自增 id 计数器；拉取后自动顶到最大 id 之上，避免新建撞 id
+  "members": [...],      // 成员
+  "groups": [...],       // 分组
+  "containers": [...],   // 收纳箱（含 group_id / sort_order / last_opened_at / 摆位 pos_* / size_*）
+  "items": [...],        // 物品（container_id / quantity / condition / notes / tags）
+  "recipes": [...],      // 菜谱
+  "attachments": [...],  // 附件元数据（字节在 attachments/ 目录）
+  "history": [...],      // 操作历史（含 before 快照，支持撤销）
+  "ai": { "base_url": "", "model": "auto", "api_key": "" },
+  "pcs": [...],          // 电脑开关配置（MAC/IP/令牌）
+  "health": [...]        // 体重与便便记录
+}
+```
+
+附件行的字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 附件 id，同时是手机格式里的文件名 |
+| `item_id` / `container_id` / `recipe_id` | 挂在谁身上（三选一，其余为 `null`） |
+| `kind` | `image` / `file` / `video` |
+| `filename` | 原始文件名（给人看的） |
+| `mime_type` / `size_bytes` | 类型与体积 |
+| `stored_name` | **电脑端格式里的相对路径**，如 `container-1/e5d69fcd….jpg`；手机自己传的附件没有这个字段 |
+
+**哪些不上云**：`ai.api_key` 推送前一律置空、拉取后仍用本机的；`pcs` 整段不参与同步；`health` 目前只存在手机上（电脑端数据库没有这张表，拉取时本机记录会被保留）。
+
+### 三、云端仓库（两种格式可以并存）
+
+**A. 手机格式** —— App 读写的就是这套：
+
+```text
+data.json                     全部业务数据（上面的 LocalState）
+attachments/<附件id>           附件字节，文件名就是 data.json 里的附件 id
+backup/meta.json              同步清单：时间、物品/箱子数、每个附件的 sha256（增量上传靠它跳过未变的文件）
+```
+
+**B. 电脑端备份格式** —— App 拉取时能识别，但自己不写：
+
+```text
+inventory.db                  SQLite 一致性快照（VACUUM INTO，服务运行中也能安全导出）
+backup-meta.json              导出时间、体积、箱子名清单
+attachments/<实体>/<uuid>.<ext>   按 container-1 / item-9 / recipe-4 分目录存放
+```
+
+两者共存时看不出区别，但**电脑端推一次备份会覆盖仓库根目录**，手机就读不到 `data.json` 了 —— 这时跑 `scripts/export-mobile-json.py` 补一份即可（见「同步问题排查」）。
+
+当前数据仓库（`my_house_data`）的实况：18 个文件、4.8MB —— `data.json`(168KB) + `inventory.db`(344KB) + `backup-meta.json` + 15 个附件（14 箱 / 118 物品）。
+
+### 四、附件怎么定位
+
+拉取时按这个顺序找文件，前一个没有才退到下一个：
+
+1. `attachments/<stored_name>` —— 电脑端格式导出的数据带这个字段，路径与仓库实际文件一一对应
+2. `attachments/<附件id>` —— 手机自己推送的格式
+3. 都找不到就记进「缺失」，界面提示「有 N 个附件在云端找不到文件」，文字数据不受影响
+
+`data.json` 不在根目录也能认出：优先根目录，其次 `backup/data.json`（旧版布局），再其次树里任意位置的 `data.json`。
+
+### 五、同步协议
+
+走平台自带的 Git Data API，不依赖 git 客户端：
+
+```text
+推送：blobs（只传变的）→ trees（base_tree 保留仓库里其它文件）→ commits → PATCH ref
+拉取：ref → trees?recursive=1 → blobs（data.json + 附件）→ 整体替换本机
+```
+
+- 附件按内容 sha256 比对，没改过的跳过上传（清单存在 localStorage `myhouse.lastSync.<provider>.manifest`）
+- `base_tree` 是「两种格式能共存」的关键：App 推送不会删掉 `inventory.db`、`backup-meta.json`
 
 ## 同步问题排查
 
@@ -151,14 +242,25 @@ gradlew.bat --no-daemon assembleDebug   # 需 ANDROID_HOME 指向 SDK
 
 ```text
 frontend/src/
-├─ views/            物品、菜谱、设置三个页面
-├─ components/       搜索、AI 面板、裁剪、预览、初始化页等组件
-├─ local/            本地数据层（IndexedDB 持久化、API 路由、AI、云同步）
-├─ composables/      启动、弹窗、查找范围、语音输入、TTS
-└─ tests/            本地数据层测试
+├─ views/            物品、菜谱、健康、设置
+├─ components/       弹窗、AI 面板、图片裁剪、初始化页等
+├─ local/            本地数据层
+│  ├─ storage.ts       IndexedDB（docs / blobs）与快照
+│  ├─ state.ts         数据模型与派生视图（LocalState 定义在这里）
+│  ├─ localApi.ts      把 /api/* 请求在本地解析掉
+│  ├─ sync.ts          云同步（推送 / 拉取）
+│  ├─ syncFormat.ts    仓库布局识别（纯函数，可单测）
+│  ├─ ai.ts / health.ts / pcPower.ts / statusLights.ts
+└─ composables/      启动、更新检查、弹窗、查找范围、语音/TTS
+
+frontend/tests/      本地数据层 + 仓库格式解析的单测（vitest）
+scripts/
+├─ export-mobile-json.py   电脑端 inventory.db → 手机 data.json
+└─ check-version.mjs       CI 版本号一致性校验
+.github/workflows/   ci.yml（测试+构建）、apk.yml（出包/发版）
 ```
 
 ## 说明
 
-- 仓库中的 `backend/`（Spring Boot）与 `deploy/` 是早期"家庭服务器"形态的遗留代码，当前手机 App **不再依赖**它们，仅作历史保留
+- 仓库中的 `backend/`（Spring Boot）与 `deploy/` 是早期"家庭服务器"形态的遗留代码，当前手机 App **不再依赖**它们，仅作历史保留；不过它导出的 `inventory.db` 仍可作为数据来源，用 `scripts/export-mobile-json.py` 转成手机格式
 - 旧版本（服务端形态）的数据库可用迁移脚本转成新格式后从云端导入
