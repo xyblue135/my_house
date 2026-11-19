@@ -145,6 +145,22 @@ export function shouldSuggestUpdate(): boolean {
 }
 
 /**
+ * 打开外部链接。
+ * Capacitor 里 `window.open(url, '_blank')` 会被 WebView 自己吃掉（什么都不发生），
+ * 必须用 `_system` 交给系统浏览器；APK 下载和安装都依赖这一步。
+ */
+export function openExternal(url: string): void {
+  if (!url) return
+  try {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+    const native = cap?.isNativePlatform?.() ?? false
+    window.open(url, native ? '_system' : '_blank')
+  } catch {
+    window.location.href = url
+  }
+}
+
+/**
  * 启动联通性测试：逐个测试已配置的云仓库与 AI 网关。
  * 测试期间对应灯闪烁（testing），结束按结果 ok / fail；未配置则灰。
  */

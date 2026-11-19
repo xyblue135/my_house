@@ -12,6 +12,7 @@ import {
 import { snapshotExists, snapshotTime, restoreSnapshot } from '../local/storage'
 import {
   APP_VERSION, updateInfo, updateError, updateRepo, setUpdateRepo, checkForUpdate, updateCheckedAt,
+  openExternal,
 } from '../composables/useAppUpdate'
 import {
   ttsEnabled, ttsCustomOn, ttsCustomUrl, ttsCustomKey,
@@ -176,8 +177,11 @@ async function runUpdateCheck() {
   } finally { checking.value = false }
 }
 function downloadUpdate() {
-  if (updateInfo.value?.apkUrl) window.open(updateInfo.value.apkUrl, '_blank')
-  else if (updateInfo.value) window.open(updateInfo.value.releaseUrl, '_blank')
+  const url = updateInfo.value?.apkUrl || updateInfo.value?.releaseUrl
+  if (!url) return
+  // App 内必须用系统浏览器打开，否则 WebView 会把 apk 下载链接吃掉
+  openExternal(url)
+  toast(updateInfo.value?.apkUrl ? '已在浏览器打开下载，装完覆盖安装即可' : '已打开 Releases 页面')
 }
 
 function restoreSnapshotClick() {
